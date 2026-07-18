@@ -227,22 +227,3 @@ sudo ./uninstall.sh --purge-docker
 ```text
 1-2 dakika bekleyip sayfayı yenileyin.
 ```
-
----
-
-## Güvenlik Notları
-
-```text
-- .env dosyasını GitHub’a yüklemeyin
-- Kurulumda üretilen admin şifresini güvenli yerde saklayın
-- Web panelini doğrudan internete açık bırakmayın
-- Üretim ortamında firewall veya reverse proxy arkasında yayınlayın
-- Düzenli PostgreSQL yedeği alın
-```
-
----
-
-## Sorumluluk Reddi
-
-Bu proje bağımsız olarak geliştirilmiştir.  
-USOM ile resmi bir bağlantısı, onayı veya ortaklığı yoktur.
