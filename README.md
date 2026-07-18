@@ -219,11 +219,3 @@ sudo ./uninstall.sh --purge-docker
 > Dikkat: `--purge-docker` Docker Engine’i ve Docker sistem verilerini kaldırır. Aynı sunucuda başka Docker uygulamaları varsa kullanmayın.
 
 ---
-
-## İlk Başlatma Notu
-
-İlk kurulumdan sonra backend servisleri ayağa kalkarken web panel kısa süreliğine `502 Bad Gateway` gösterebilir.
-
-```text
-1-2 dakika bekleyip sayfayı yenileyin.
-```
