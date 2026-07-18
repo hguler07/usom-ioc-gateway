@@ -88,3 +88,11 @@ docker compose -f compose.yaml down
 - Firewall veya reverse proxy arkasında yayınlayın.
 - Kurulumda üretilen admin şifresini güvenli yerde saklayın.
 - Üretim ortamında düzenli PostgreSQL yedeği alın.
+
+## Tek Komut Ubuntu Kurulumu
+
+Sıfır Ubuntu sunucuda Docker yoksa otomatik kurulum yapar, repo dosyalarını indirir ve sistemi başlatır:
+
+curl -fsSL https://raw.githubusercontent.com/hguler07/usom-ioc-gateway/main/bootstrap-ubuntu.sh -o bootstrap-ubuntu.sh
+chmod +x bootstrap-ubuntu.sh
+./bootstrap-ubuntu.sh
