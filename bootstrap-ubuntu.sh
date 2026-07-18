@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 REPO_URL="https://github.com/hguler07/usom-ioc-gateway.git"
 APP_DIR="/opt/usom-ioc-gateway"
@@ -11,6 +11,13 @@ if [ "$(id -u)" -ne 0 ]; then
 else
   SUDO=""
 fi
+
+if ! command -v apt >/dev/null 2>&1; then
+  echo "HATA: Bu installer Ubuntu/Debian tabanlı sistemler içindir."
+  exit 1
+fi
+
+export DEBIAN_FRONTEND=noninteractive
 
 echo "Gerekli paketler kontrol ediliyor..."
 $SUDO apt update
@@ -47,13 +54,11 @@ else
   if [ ! -d "$APP_DIR/.git" ]; then
     echo "HATA: $APP_DIR klasörü var ama Git reposu değil."
     echo "Güvenlik için otomatik silme yapılmadı."
-    echo "Temiz kurulum için ayrı uninstall/cleanup komutu kullanılmalı."
     exit 1
   fi
 
   $SUDO git config --global --add safe.directory "$APP_DIR" || true
-  cd "$APP_DIR"
-  $SUDO git pull
+  $SUDO git -C "$APP_DIR" pull --ff-only
 fi
 
 cd "$APP_DIR"
