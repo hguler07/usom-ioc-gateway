@@ -1,0 +1,54 @@
+# Git / local
+.git
+.gitignore
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Backups / dumps / generated feeds
+backups
+patch-file-backups
+full-backups
+feeds
+logs
+*.bak
+*.backup
+*.dump
+*.sql
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
+# Frontend dependencies/build
+frontend/node_modules
+frontend/dist
+node_modules
+
+# Experiments / scratch
+experiments
+v0-context
+v0-current-react-ui
+v0-current-react-ui-*.tar.gz
+v0-threat-feed-gateway-context-*.tar.gz
+HTTP
+
+# Python cache
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.vscode
+.idea

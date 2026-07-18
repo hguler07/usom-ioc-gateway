@@ -1,0 +1,11 @@
+.env
+*.env
+!.env.example
+feeds/
+logs/
+backups/
+full-backups/
+patch-file-backups/
+*.tar.gz
+*.zip
+.DS_Store

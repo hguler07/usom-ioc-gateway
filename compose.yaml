@@ -1,0 +1,171 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U threatfeed -d threatfeed"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  feeds-init:
+    image: hguler07/usom-ioc-gateway:backend-0.1.9
+    user: "0:0"
+    restart: "no"
+    volumes:
+      - feeds_data:/feeds
+    command: >
+      sh -c "mkdir -p /feeds && chown -R appuser:appuser /feeds && ls -ld /feeds"
+
+  web:
+    image: hguler07/usom-ioc-gateway:backend-0.1.9
+    restart: always
+    init: true
+    stop_grace_period: 180s
+    env_file:
+      - .env
+    volumes:
+      - feeds_data:/feeds
+    depends_on:
+      db:
+        condition: service_healthy
+      feeds-init:
+        condition: service_completed_successfully
+    command: >
+      sh -c "
+      python manage.py migrate &&
+      python manage.py init_admin &&
+      exec gunicorn threatfeed.wsgi:application --bind 0.0.0.0:8000 --workers 3
+      "
+
+  orchestrator:
+    image: hguler07/usom-ioc-gateway:backend-0.1.9
+    restart: always
+    init: true
+    stop_grace_period: 180s
+    env_file:
+      - .env
+    volumes:
+      - feeds_data:/feeds
+    depends_on:
+      db:
+        condition: service_healthy
+      feeds-init:
+        condition: service_completed_successfully
+      web:
+        condition: service_started
+    command:
+      - sh
+      - -c
+      - |
+        until python manage.py migrate --check >/dev/null 2>&1; do
+          echo "Waiting for database migrations..."
+          sleep 2
+        done
+        exec python manage.py run_orchestrator
+
+  worker-domain:
+    image: hguler07/usom-ioc-gateway:backend-0.1.9
+    restart: always
+    init: true
+    stop_grace_period: 180s
+    env_file:
+      - .env
+    volumes:
+      - feeds_data:/feeds
+    depends_on:
+      db:
+        condition: service_healthy
+      feeds-init:
+        condition: service_completed_successfully
+      web:
+        condition: service_started
+    command: >
+      sh -c "
+      sleep 10 &&
+      exec python manage.py run_job_worker --type domain --poll 3
+      "
+
+  worker-ip:
+    image: hguler07/usom-ioc-gateway:backend-0.1.9
+    restart: always
+    init: true
+    stop_grace_period: 180s
+    env_file:
+      - .env
+    volumes:
+      - feeds_data:/feeds
+    depends_on:
+      db:
+        condition: service_healthy
+      feeds-init:
+        condition: service_completed_successfully
+      web:
+        condition: service_started
+    command: >
+      sh -c "
+      sleep 10 &&
+      exec python manage.py run_job_worker --type ip --poll 3
+      "
+
+  worker-url:
+    image: hguler07/usom-ioc-gateway:backend-0.1.9
+    restart: always
+    init: true
+    stop_grace_period: 180s
+    env_file:
+      - .env
+    volumes:
+      - feeds_data:/feeds
+    depends_on:
+      db:
+        condition: service_healthy
+      feeds-init:
+        condition: service_completed_successfully
+      web:
+        condition: service_started
+    command: >
+      sh -c "
+      sleep 10 &&
+      exec python manage.py run_job_worker --type url --poll 3
+      "
+
+  worker-ipv6:
+    image: hguler07/usom-ioc-gateway:backend-0.1.9
+    restart: always
+    init: true
+    stop_grace_period: 180s
+    env_file:
+      - .env
+    volumes:
+      - feeds_data:/feeds
+    depends_on:
+      db:
+        condition: service_healthy
+      feeds-init:
+        condition: service_completed_successfully
+      web:
+        condition: service_started
+    command: >
+      sh -c "
+      sleep 10 &&
+      exec python manage.py run_job_worker --type ipv6 --poll 3
+      "
+
+  nginx:
+    image: hguler07/usom-ioc-gateway:nginx-0.1.14
+    restart: always
+    ports:
+      - "${TFG_HTTP_PORT:-80}:8080"
+    volumes:
+      - feeds_data:/usr/share/nginx/html/feeds:ro
+    depends_on:
+      - web
+
+volumes:
+  postgres_data:
+  feeds_data:
