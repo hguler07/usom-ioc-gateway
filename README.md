@@ -66,3 +66,14 @@ docker compose -f compose.yaml down
 - Web arayüzünü doğrudan internete açık bırakmayın.
 - Firewall veya reverse proxy arkasında yayınlayın.
 - Kurulumda üretilen admin şifresini güvenli yerde saklayın.
+## Kaldırma
+
+Sadece USOM IOC Gateway uygulamasını, container'larını, volume'larını ve verilerini kaldırmak için:
+
+sudo ./uninstall.sh
+
+Docker dahil tam temizlik yapmak için:
+
+sudo ./uninstall.sh --purge-docker
+
+Dikkat: --purge-docker parametresi Docker Engine'i ve Docker sistem verilerini kaldırır. Aynı sunucuda başka Docker uygulamaları varsa etkilenebilir.
