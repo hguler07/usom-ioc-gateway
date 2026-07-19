@@ -2,8 +2,25 @@
 
 **USOM IOC Gateway**, USOM IOC verilerini senkronize ederek güvenlik cihazları için firewall uyumlu TXT feed dosyaları yayınlayan Docker tabanlı bağımsız bir IOC gateway projesidir.
 
-> Bu proje bağımsız olarak geliştirilmiştir. Resmi USOM ürünü değildir.
+---
+## Minimum Sistem Gereksinimleri
 
+USOM IOC Gateway Docker tabanlı çalışır. Kaynak ihtiyacı IOC sayısı, senkronizasyon sıklığı, log miktarı ve Change History büyüklüğüne göre değişebilir.
+
+| Kullanım Tipi | CPU | RAM | Disk |
+|---|---:|---:|---:|
+| Minimum test ortamı | 2 vCPU | 2 GB | 20 GB |
+| Önerilen kurulum | 2-4 vCPU | 4 GB | 40 GB |
+| Uzun süreli / üretim kullanımı | 4 vCPU | 8 GB | 80 GB+ |
+
+### Önerilen Ortam
+
+```text
+- Ubuntu Server 22.04 LTS veya üzeri
+- Docker Engine
+- Docker Compose Plugin
+- İnternet erişimi
+- En az 40 GB disk alanı
 ---
 
 ## Genel Bakış
