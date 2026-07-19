@@ -1,6 +1,6 @@
 # install-windows.ps1
-# compose.yaml ve .env.example dosyalarına dokunmaz.
-# Windows kurulumu için .env dosyasını otomatik oluşturur.
+# compose.yaml ve .env.example dosyalarini degistirmez.
+# Windows kurulumu icin yerel .env dosyasi olusturur.
 
 [CmdletBinding()]
 param()
@@ -10,21 +10,25 @@ $ErrorActionPreference = "Stop"
 
 function New-RandomHex {
     param(
-        [int]$Length = 32
+        [int]$ByteLength = 32
     )
 
-    $bytes = New-Object byte[] $Length
-    $generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $Bytes = [System.Array]::CreateInstance(
+        [byte],
+        $ByteLength
+    )
+
+    $Generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
 
     try {
-        $generator.GetBytes($bytes)
+        $Generator.GetBytes($Bytes)
     }
     finally {
-        $generator.Dispose()
+        $Generator.Dispose()
     }
 
     return -join (
-        $bytes | ForEach-Object {
+        $Bytes | ForEach-Object {
             $_.ToString("x2")
         }
     )
@@ -33,52 +37,79 @@ function New-RandomHex {
 function Set-EnvValue {
     param(
         [Parameter(Mandatory)]
-        [System.Collections.Generic.List[string]]$Lines,
+        [AllowEmptyString()]
+        [string]$Content,
 
         [Parameter(Mandatory)]
         [string]$Name,
 
         [Parameter(Mandatory)]
-        [string]$Value
+        [string]$Value,
+
+        [switch]$OnlyIfMissingOrPlaceholder
     )
 
-    $pattern = "^\s*$([regex]::Escape($Name))\s*="
-    $found = $false
+    $EscapedName = [Regex]::Escape($Name)
+    $Pattern = "(?m)^[ \t]*$EscapedName[ \t]*=(.*)$"
+    $Match = [Regex]::Match($Content, $Pattern)
 
-    for ($i = 0; $i -lt $Lines.Count; $i++) {
-        if ($Lines[$i] -match $pattern) {
-            $Lines[$i] = "$Name=$Value"
-            $found = $true
-            break
+    if ($Match.Success) {
+        $CurrentValue = $Match.Groups[1].Value.Trim()
+        $CurrentValue = $CurrentValue.Trim(
+            [char[]]@('"', "'")
+        )
+
+        if (
+            $OnlyIfMissingOrPlaceholder -and
+            -not [string]::IsNullOrWhiteSpace($CurrentValue) -and
+            $CurrentValue -notmatch "^(CHANGE_ME|CHANGEME|REPLACE_ME)(_|$)"
+        ) {
+            return $Content
         }
+
+        return [Regex]::Replace(
+            $Content,
+            $Pattern,
+            "$Name=$Value"
+        )
     }
 
-    if (-not $found) {
-        [void]$Lines.Add("$Name=$Value")
+    if (
+        $Content.Length -gt 0 -and
+        -not $Content.EndsWith("`n")
+    ) {
+        $Content += "`r`n"
     }
+
+    return $Content + "$Name=$Value`r`n"
 }
 
 function Get-EnvValue {
     param(
         [Parameter(Mandatory)]
-        [System.Collections.Generic.List[string]]$Lines,
+        [AllowEmptyString()]
+        [string]$Content,
 
         [Parameter(Mandatory)]
         [string]$Name
     )
 
-    $pattern = "^\s*$([regex]::Escape($Name))\s*=(.*)$"
+    $EscapedName = [Regex]::Escape($Name)
+    $Pattern = "(?m)^[ \t]*$EscapedName[ \t]*=(.*)$"
+    $Match = [Regex]::Match($Content, $Pattern)
 
-    foreach ($line in $Lines) {
-        if ($line -match $pattern) {
-            return $Matches[1].Trim()
-        }
+    if (-not $Match.Success) {
+        throw ".env dosyasinda '$Name' degeri bulunamadi."
     }
 
-    return ""
+    $Value = $Match.Groups[1].Value.Trim()
+
+    return $Value.Trim(
+        [char[]]@('"', "'")
+    )
 }
 
-function Invoke-Docker {
+function Invoke-DockerCommand {
     param(
         [Parameter(Mandatory)]
         [string[]]$Arguments,
@@ -87,237 +118,261 @@ function Invoke-Docker {
     )
 
     if ($Quiet) {
-        & docker @Arguments *> $null
+        & docker @Arguments | Out-Null
     }
     else {
         & docker @Arguments
     }
 
     if ($LASTEXITCODE -ne 0) {
-        throw "Docker komutu başarısız oldu: docker $($Arguments -join ' ')"
+        throw "Docker komutu basarisiz oldu: docker $($Arguments -join ' ')"
     }
 }
 
-$originalLocation = Get-Location
+$OriginalLocation = Get-Location
+$ExitCode = 0
 
 try {
     Write-Host ""
-    Write-Host "USOM IOC Gateway Windows kurulumu başlıyor..." `
+    Write-Host "USOM IOC Gateway Windows kurulumu baslatiliyor..." `
         -ForegroundColor Cyan
 
-    # Her zaman scriptin bulunduğu klasörü kullan.
-    $projectPath = $PSScriptRoot
+    $ProjectPath = $PSScriptRoot
 
-    if ([string]::IsNullOrWhiteSpace($projectPath)) {
-        throw "install-windows.ps1 dosyasının bulunduğu klasör tespit edilemedi."
+    if ([string]::IsNullOrWhiteSpace($ProjectPath)) {
+        throw "Kurulum dosyasinin bulundugu klasor tespit edilemedi."
     }
 
-    Set-Location -LiteralPath $projectPath
+    $ProjectPath = (
+        Resolve-Path -LiteralPath $ProjectPath
+    ).Path
 
-    $composePath = Join-Path $projectPath "compose.yaml"
-    $envExamplePath = Join-Path $projectPath ".env.example"
-    $envPath = Join-Path $projectPath ".env"
+    Set-Location -LiteralPath $ProjectPath
 
-    Write-Host "Proje klasörü: $projectPath" `
+    $ComposePath = Join-Path `
+        $ProjectPath `
+        "compose.yaml"
+
+    $EnvExamplePath = Join-Path `
+        $ProjectPath `
+        ".env.example"
+
+    $EnvPath = Join-Path `
+        $ProjectPath `
+        ".env"
+
+    Write-Host "Proje klasoru: $ProjectPath" `
         -ForegroundColor DarkGray
 
-    if (-not (Test-Path -LiteralPath $composePath -PathType Leaf)) {
-        throw "compose.yaml bulunamadı: $composePath"
+    if (-not (
+        Test-Path `
+            -LiteralPath $ComposePath `
+            -PathType Leaf
+    )) {
+        throw "compose.yaml bulunamadi: $ComposePath"
     }
 
-    if (-not (Test-Path -LiteralPath $envExamplePath -PathType Leaf)) {
-        throw ".env.example bulunamadı: $envExamplePath"
+    if (-not (
+        Test-Path `
+            -LiteralPath $EnvExamplePath `
+            -PathType Leaf
+    )) {
+        throw ".env.example bulunamadi: $EnvExamplePath"
     }
 
-    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    if (-not (
+        Get-Command docker `
+            -ErrorAction SilentlyContinue
+    )) {
         throw @"
-Docker bulunamadı.
+Docker komutu bulunamadi.
 
-Önce Docker Desktop'ı kurun ve PowerShell'i yeniden açın.
+Docker Desktop'i kurun ve PowerShell'i yeniden acin.
 "@
     }
 
     Write-Host "Docker Desktop kontrol ediliyor..." `
         -ForegroundColor Cyan
 
-    try {
-        Invoke-Docker -Arguments @("info") -Quiet
-    }
-    catch {
-        throw @"
-Docker Desktop kurulu ancak Docker Engine çalışmıyor.
+    & docker info *> $null
 
-Docker Desktop'ı açın, Engine Running durumuna gelmesini bekleyin
-ve kurulumu yeniden çalıştırın.
+    if ($LASTEXITCODE -ne 0) {
+        throw @"
+Docker Desktop kurulu ancak Docker Engine calismiyor.
+
+Docker Desktop'i acin ve Engine Running durumuna gelmesini bekleyin.
 "@
     }
 
-    Invoke-Docker `
-        -Arguments @("compose", "version") `
-        -Quiet
+    & docker compose version *> $null
 
-    # Sadece Windows kurulumuna ait .env oluşturulur.
-    # .env.example dosyası kesinlikle değiştirilmez.
-    if (-not (Test-Path -LiteralPath $envPath -PathType Leaf)) {
+    if ($LASTEXITCODE -ne 0) {
+        throw "Docker Compose calismiyor."
+    }
+
+    if (
+        -not (
+            Test-Path `
+                -LiteralPath $EnvPath `
+                -PathType Leaf
+        ) -or
+        (Get-Item -LiteralPath $EnvPath).Length -eq 0
+    ) {
         Copy-Item `
-            -LiteralPath $envExamplePath `
-            -Destination $envPath `
+            -LiteralPath $EnvExamplePath `
+            -Destination $EnvPath `
             -Force
 
-        Write-Host "Windows için .env dosyası oluşturuldu." `
+        Write-Host "Windows icin .env dosyasi olusturuldu." `
             -ForegroundColor Green
     }
     else {
-        Write-Host "Mevcut .env dosyası kullanılacak." `
+        Write-Host "Mevcut .env dosyasi kullaniliyor." `
             -ForegroundColor DarkGray
     }
 
-    $envLines = New-Object `
-        "System.Collections.Generic.List[string]"
+    $EnvContent = [System.IO.File]::ReadAllText(
+        $EnvPath,
+        [System.Text.Encoding]::UTF8
+    )
 
-    foreach (
-        $line in @(
-            Get-Content `
-                -LiteralPath $envPath `
-                -Encoding UTF8
-        )
-    ) {
-        [void]$envLines.Add([string]$line)
+    if ([string]::IsNullOrWhiteSpace($EnvContent)) {
+        throw ".env dosyasi bos."
     }
 
-    $secretKey = Get-EnvValue `
-        -Lines $envLines `
-        -Name "SECRET_KEY"
+    $EnvContent = Set-EnvValue `
+        -Content $EnvContent `
+        -Name "SECRET_KEY" `
+        -Value (New-RandomHex -ByteLength 32) `
+        -OnlyIfMissingOrPlaceholder
 
-    if (
-        [string]::IsNullOrWhiteSpace($secretKey) -or
-        $secretKey -eq "CHANGE_ME"
-    ) {
-        Set-EnvValue `
-            -Lines $envLines `
-            -Name "SECRET_KEY" `
-            -Value (New-RandomHex -Length 32)
-    }
+    $EnvContent = Set-EnvValue `
+        -Content $EnvContent `
+        -Name "POSTGRES_PASSWORD" `
+        -Value (New-RandomHex -ByteLength 32) `
+        -OnlyIfMissingOrPlaceholder
 
-    $postgresPassword = Get-EnvValue `
-        -Lines $envLines `
-        -Name "POSTGRES_PASSWORD"
+    $EnvContent = Set-EnvValue `
+        -Content $EnvContent `
+        -Name "DJANGO_SUPERUSER_PASSWORD" `
+        -Value (New-RandomHex -ByteLength 24) `
+        -OnlyIfMissingOrPlaceholder
 
-    if (
-        [string]::IsNullOrWhiteSpace($postgresPassword) -or
-        $postgresPassword -eq "CHANGE_ME"
-    ) {
-        Set-EnvValue `
-            -Lines $envLines `
-            -Name "POSTGRES_PASSWORD" `
-            -Value (New-RandomHex -Length 32)
-    }
+    $EnvContent = Set-EnvValue `
+        -Content $EnvContent `
+        -Name "DJANGO_SUPERUSER_USERNAME" `
+        -Value "admin" `
+        -OnlyIfMissingOrPlaceholder
 
-    $adminPassword = Get-EnvValue `
-        -Lines $envLines `
-        -Name "DJANGO_SUPERUSER_PASSWORD"
-
-    if (
-        [string]::IsNullOrWhiteSpace($adminPassword) -or
-        $adminPassword -eq "CHANGE_ME"
-    ) {
-        Set-EnvValue `
-            -Lines $envLines `
-            -Name "DJANGO_SUPERUSER_PASSWORD" `
-            -Value (New-RandomHex -Length 24)
-    }
-
-    # Yalnızca Windows için oluşturulan .env içerisinde 8080 kullanılır.
-    Set-EnvValue `
-        -Lines $envLines `
+    # Ubuntu dosyalari degismez.
+    # Yalnizca Windows bilgisayarindaki .env 8080 kullanir.
+    $EnvContent = Set-EnvValue `
+        -Content $EnvContent `
         -Name "TFG_HTTP_PORT" `
         -Value "8080"
 
-    Set-EnvValue `
-        -Lines $envLines `
-        -Name "DJANGO_SUPERUSER_USERNAME" `
-        -Value "admin"
+    $Utf8NoBom = New-Object `
+        System.Text.UTF8Encoding($false)
 
-    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-
-    [System.IO.File]::WriteAllLines(
-        $envPath,
-        $envLines,
-        $utf8NoBom
+    [System.IO.File]::WriteAllText(
+        $EnvPath,
+        $EnvContent,
+        $Utf8NoBom
     )
 
-    $adminUser = Get-EnvValue `
-        -Lines $envLines `
+    $AdminUser = Get-EnvValue `
+        -Content $EnvContent `
         -Name "DJANGO_SUPERUSER_USERNAME"
 
-    $adminPass = Get-EnvValue `
-        -Lines $envLines `
+    $AdminPassword = Get-EnvValue `
+        -Content $EnvContent `
         -Name "DJANGO_SUPERUSER_PASSWORD"
 
-    $httpPort = Get-EnvValue `
-        -Lines $envLines `
+    $HttpPort = Get-EnvValue `
+        -Content $EnvContent `
         -Name "TFG_HTTP_PORT"
 
-    $composeArguments = @(
+    $ComposeArguments = @(
         "compose",
-        "--project-directory", $projectPath,
-        "--env-file", $envPath,
-        "-f", $composePath
+        "--project-name",
+        "usom-ioc-gateway",
+        "--project-directory",
+        $ProjectPath,
+        "--env-file",
+        $EnvPath,
+        "-f",
+        $ComposePath
     )
 
-    Write-Host "Docker Compose dosyası doğrulanıyor..." `
+    Write-Host "Docker Compose yapilandirmasi kontrol ediliyor..." `
         -ForegroundColor Cyan
 
-    Invoke-Docker `
-        -Arguments ($composeArguments + @("config", "--quiet")) `
+    Invoke-DockerCommand `
+        -Arguments (
+            $ComposeArguments +
+            @("config", "--quiet")
+        ) `
         -Quiet
 
-    Write-Host "Docker Hub image'ları indiriliyor..." `
+    Write-Host "Docker Hub image dosyalari indiriliyor..." `
         -ForegroundColor Cyan
 
-    Invoke-Docker `
-        -Arguments ($composeArguments + @("pull"))
-
-    Write-Host "USOM IOC Gateway servisleri başlatılıyor..." `
-        -ForegroundColor Cyan
-
-    Invoke-Docker `
+    Invoke-DockerCommand `
         -Arguments (
-            $composeArguments +
-            @("up", "-d", "--remove-orphans")
+            $ComposeArguments +
+            @("pull")
+        )
+
+    Write-Host "USOM IOC Gateway servisleri baslatiliyor..." `
+        -ForegroundColor Cyan
+
+    Invoke-DockerCommand `
+        -Arguments (
+            $ComposeArguments +
+            @(
+                "up",
+                "-d",
+                "--remove-orphans"
+            )
         )
 
     Write-Host ""
     Write-Host "Servis durumu:" `
         -ForegroundColor Cyan
 
-    Invoke-Docker `
-        -Arguments ($composeArguments + @("ps"))
+    Invoke-DockerCommand `
+        -Arguments (
+            $ComposeArguments +
+            @("ps")
+        )
 
     Write-Host ""
-    Write-Host "Kurulum başarıyla tamamlandı." `
+    Write-Host "Kurulum basariyla tamamlandi." `
         -ForegroundColor Green
 
-    Write-Host "Adres          : http://localhost:$httpPort"
-    Write-Host "Admin kullanıcı: $adminUser"
-    Write-Host "Admin şifre    : $adminPass" `
+    Write-Host "Adres          : http://localhost:$HttpPort"
+    Write-Host "Admin kullanici: $AdminUser"
+    Write-Host "Admin sifre    : $AdminPassword" `
         -ForegroundColor Yellow
 
     Write-Host ""
-    Write-Host "Admin şifresini güvenli bir yerde saklayın." `
+    Write-Host "Admin sifresini guvenli bir yerde saklayin." `
         -ForegroundColor DarkYellow
 }
 catch {
+    $ExitCode = 1
+
     Write-Host ""
-    Write-Host "KURULUM BAŞARISIZ OLDU" `
+    Write-Host "KURULUM BASARISIZ OLDU" `
         -ForegroundColor Red
 
     Write-Host $_.Exception.Message `
         -ForegroundColor Red
 
     Write-Host ""
-    exit 1
 }
 finally {
-    Set-Location $originalLocation
+    Set-Location -LiteralPath $OriginalLocation.Path
 }
+
+exit $ExitCode
