@@ -9,9 +9,7 @@ USOM IOC Gateway Docker tabanlı çalışır. Kaynak ihtiyacı IOC sayısı, sen
 
 | Kullanım Tipi | CPU | RAM | Disk |
 |---|---:|---:|---:|
-| Minimum test ortamı | 2 vCPU | 2 GB | 20 GB |
-| Önerilen kurulum | 2-4 vCPU | 4 GB | 40 GB |
-| Uzun süreli / üretim kullanımı | 4 vCPU | 8 GB | 80 GB+ |
+| Önerilen Sistem Ortamı | 2 vCPU | 4 GB | 20 GB |
 
 ### Önerilen Ortam
 
