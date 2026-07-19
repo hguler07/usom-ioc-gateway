@@ -1,5 +1,6 @@
 # install-windows.ps1
-# compose.yaml ve .env.example ile aynı klasörde bulunmalıdır.
+# compose.yaml ve .env.example dosyalarına dokunmaz.
+# Windows kurulumu için .env dosyasını otomatik oluşturur.
 
 [CmdletBinding()]
 param()
@@ -9,25 +10,27 @@ $ErrorActionPreference = "Stop"
 
 function New-RandomHex {
     param(
-        [int]$ByteLength = 32
+        [int]$Length = 32
     )
 
-    $Bytes = New-Object byte[] $ByteLength
-    $Rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $bytes = New-Object byte[] $Length
+    $generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
 
     try {
-        $Rng.GetBytes($Bytes)
+        $generator.GetBytes($bytes)
     }
     finally {
-        $Rng.Dispose()
+        $generator.Dispose()
     }
 
-    return -join ($Bytes | ForEach-Object {
-        $_.ToString("x2")
-    })
+    return -join (
+        $bytes | ForEach-Object {
+            $_.ToString("x2")
+        }
+    )
 }
 
-function Set-EnvVariable {
+function Set-EnvValue {
     param(
         [Parameter(Mandatory)]
         [System.Collections.Generic.List[string]]$Lines,
@@ -36,41 +39,26 @@ function Set-EnvVariable {
         [string]$Name,
 
         [Parameter(Mandatory)]
-        [string]$Value,
-
-        [switch]$OnlyIfMissingOrChangeMe
+        [string]$Value
     )
 
-    $Pattern = "^\s*$([Regex]::Escape($Name))\s*="
-    $FoundIndex = -1
+    $pattern = "^\s*$([regex]::Escape($Name))\s*="
+    $found = $false
 
     for ($i = 0; $i -lt $Lines.Count; $i++) {
-        if ($Lines[$i] -match $Pattern) {
-            $FoundIndex = $i
+        if ($Lines[$i] -match $pattern) {
+            $Lines[$i] = "$Name=$Value"
+            $found = $true
             break
         }
     }
 
-    if ($FoundIndex -ge 0) {
-        $CurrentValue = ($Lines[$FoundIndex] -replace $Pattern, "").Trim()
-        $CurrentValue = $CurrentValue.Trim('"', "'")
-
-        if (
-            $OnlyIfMissingOrChangeMe -and
-            -not [string]::IsNullOrWhiteSpace($CurrentValue) -and
-            $CurrentValue -notmatch "^(CHANGE_ME|CHANGEME|REPLACE_ME)$"
-        ) {
-            return
-        }
-
-        $Lines[$FoundIndex] = "$Name=$Value"
-    }
-    else {
+    if (-not $found) {
         [void]$Lines.Add("$Name=$Value")
     }
 }
 
-function Get-EnvVariable {
+function Get-EnvValue {
     param(
         [Parameter(Mandatory)]
         [System.Collections.Generic.List[string]]$Lines,
@@ -79,16 +67,15 @@ function Get-EnvVariable {
         [string]$Name
     )
 
-    $Pattern = "^\s*$([Regex]::Escape($Name))\s*=(.*)$"
+    $pattern = "^\s*$([regex]::Escape($Name))\s*=(.*)$"
 
-    foreach ($Line in $Lines) {
-        if ($Line -match $Pattern) {
-            $Value = $Matches[1].Trim()
-            return $Value.Trim('"', "'")
+    foreach ($line in $Lines) {
+        if ($line -match $pattern) {
+            return $Matches[1].Trim()
         }
     }
 
-    throw ".env içerisinde '$Name' değeri bulunamadı."
+    return ""
 }
 
 function Invoke-Docker {
@@ -111,47 +98,42 @@ function Invoke-Docker {
     }
 }
 
-$OriginalLocation = Get-Location
+$originalLocation = Get-Location
 
 try {
     Write-Host ""
     Write-Host "USOM IOC Gateway Windows kurulumu başlıyor..." `
         -ForegroundColor Cyan
 
-    # Script hangi klasördeyse proje klasörü odur.
-    $ProjectPath = $PSScriptRoot
+    # Her zaman scriptin bulunduğu klasörü kullan.
+    $projectPath = $PSScriptRoot
 
-    if ([string]::IsNullOrWhiteSpace($ProjectPath)) {
-        throw @"
-Script klasörü tespit edilemedi.
-
-Kodu PowerShell ekranına satır satır yapıştırmayın.
-install-windows.ps1 dosyasını çalıştırın.
-"@
+    if ([string]::IsNullOrWhiteSpace($projectPath)) {
+        throw "install-windows.ps1 dosyasının bulunduğu klasör tespit edilemedi."
     }
 
-    Set-Location -LiteralPath $ProjectPath
+    Set-Location -LiteralPath $projectPath
 
-    $ComposePath = Join-Path $ProjectPath "compose.yaml"
-    $EnvExamplePath = Join-Path $ProjectPath ".env.example"
-    $EnvPath = Join-Path $ProjectPath ".env"
+    $composePath = Join-Path $projectPath "compose.yaml"
+    $envExamplePath = Join-Path $projectPath ".env.example"
+    $envPath = Join-Path $projectPath ".env"
 
-    Write-Host "Proje klasörü: $ProjectPath" `
+    Write-Host "Proje klasörü: $projectPath" `
         -ForegroundColor DarkGray
 
-    if (-not (Test-Path -LiteralPath $ComposePath -PathType Leaf)) {
-        throw "compose.yaml bulunamadı: $ComposePath"
+    if (-not (Test-Path -LiteralPath $composePath -PathType Leaf)) {
+        throw "compose.yaml bulunamadı: $composePath"
     }
 
-    if (-not (Test-Path -LiteralPath $EnvExamplePath -PathType Leaf)) {
-        throw ".env.example bulunamadı: $EnvExamplePath"
+    if (-not (Test-Path -LiteralPath $envExamplePath -PathType Leaf)) {
+        throw ".env.example bulunamadı: $envExamplePath"
     }
 
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
         throw @"
-Docker komutu bulunamadı.
+Docker bulunamadı.
 
-Docker Desktop'ı kurun ve PowerShell'i yeniden açın.
+Önce Docker Desktop'ı kurun ve PowerShell'i yeniden açın.
 "@
     }
 
@@ -165,8 +147,8 @@ Docker Desktop'ı kurun ve PowerShell'i yeniden açın.
         throw @"
 Docker Desktop kurulu ancak Docker Engine çalışmıyor.
 
-Docker Desktop'ı açın ve tamamen başlamasını bekleyin.
-Ardından kurulumu yeniden çalıştırın.
+Docker Desktop'ı açın, Engine Running durumuna gelmesini bekleyin
+ve kurulumu yeniden çalıştırın.
 "@
     }
 
@@ -174,125 +156,134 @@ Ardından kurulumu yeniden çalıştırın.
         -Arguments @("compose", "version") `
         -Quiet
 
-    $EnvCreated = $false
-
-    # .env yoksa veya boşsa yeniden oluştur.
-    if (
-        -not (Test-Path -LiteralPath $EnvPath -PathType Leaf) -or
-        (Get-Item -LiteralPath $EnvPath).Length -eq 0
-    ) {
+    # Sadece Windows kurulumuna ait .env oluşturulur.
+    # .env.example dosyası kesinlikle değiştirilmez.
+    if (-not (Test-Path -LiteralPath $envPath -PathType Leaf)) {
         Copy-Item `
-            -LiteralPath $EnvExamplePath `
-            -Destination $EnvPath `
+            -LiteralPath $envExamplePath `
+            -Destination $envPath `
             -Force
 
-        $EnvCreated = $true
-
-        Write-Host ".env dosyası oluşturuldu." `
+        Write-Host "Windows için .env dosyası oluşturuldu." `
             -ForegroundColor Green
     }
     else {
-        Write-Host "Mevcut .env dosyası korunuyor." `
+        Write-Host "Mevcut .env dosyası kullanılacak." `
             -ForegroundColor DarkGray
     }
 
-    $EnvLines = New-Object `
+    $envLines = New-Object `
         "System.Collections.Generic.List[string]"
 
     foreach (
-        $Line in @(
+        $line in @(
             Get-Content `
-                -LiteralPath $EnvPath `
+                -LiteralPath $envPath `
                 -Encoding UTF8
         )
     ) {
-        [void]$EnvLines.Add([string]$Line)
+        [void]$envLines.Add([string]$line)
     }
 
-    Set-EnvVariable `
-        -Lines $EnvLines `
-        -Name "SECRET_KEY" `
-        -Value (New-RandomHex -ByteLength 32) `
-        -OnlyIfMissingOrChangeMe
+    $secretKey = Get-EnvValue `
+        -Lines $envLines `
+        -Name "SECRET_KEY"
 
-    Set-EnvVariable `
-        -Lines $EnvLines `
-        -Name "POSTGRES_PASSWORD" `
-        -Value (New-RandomHex -ByteLength 32) `
-        -OnlyIfMissingOrChangeMe
-
-    Set-EnvVariable `
-        -Lines $EnvLines `
-        -Name "DJANGO_SUPERUSER_PASSWORD" `
-        -Value (New-RandomHex -ByteLength 24) `
-        -OnlyIfMissingOrChangeMe
-
-    Set-EnvVariable `
-        -Lines $EnvLines `
-        -Name "DJANGO_SUPERUSER_USERNAME" `
-        -Value "admin" `
-        -OnlyIfMissingOrChangeMe
-
-    # Yeni kurulumlarda Windows portu 8080 olsun.
-    if ($EnvCreated) {
-        Set-EnvVariable `
-            -Lines $EnvLines `
-            -Name "TFG_HTTP_PORT" `
-            -Value "8080"
-    }
-    else {
-        Set-EnvVariable `
-            -Lines $EnvLines `
-            -Name "TFG_HTTP_PORT" `
-            -Value "8080" `
-            -OnlyIfMissingOrChangeMe
+    if (
+        [string]::IsNullOrWhiteSpace($secretKey) -or
+        $secretKey -eq "CHANGE_ME"
+    ) {
+        Set-EnvValue `
+            -Lines $envLines `
+            -Name "SECRET_KEY" `
+            -Value (New-RandomHex -Length 32)
     }
 
-    $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    $postgresPassword = Get-EnvValue `
+        -Lines $envLines `
+        -Name "POSTGRES_PASSWORD"
 
-    [System.IO.File]::WriteAllLines(
-        $EnvPath,
-        $EnvLines,
-        $Utf8NoBom
-    )
+    if (
+        [string]::IsNullOrWhiteSpace($postgresPassword) -or
+        $postgresPassword -eq "CHANGE_ME"
+    ) {
+        Set-EnvValue `
+            -Lines $envLines `
+            -Name "POSTGRES_PASSWORD" `
+            -Value (New-RandomHex -Length 32)
+    }
 
-    $AdminUser = Get-EnvVariable `
-        -Lines $EnvLines `
-        -Name "DJANGO_SUPERUSER_USERNAME"
-
-    $AdminPass = Get-EnvVariable `
-        -Lines $EnvLines `
+    $adminPassword = Get-EnvValue `
+        -Lines $envLines `
         -Name "DJANGO_SUPERUSER_PASSWORD"
 
-    $HttpPort = Get-EnvVariable `
-        -Lines $EnvLines `
-        -Name "TFG_HTTP_PORT"
+    if (
+        [string]::IsNullOrWhiteSpace($adminPassword) -or
+        $adminPassword -eq "CHANGE_ME"
+    ) {
+        Set-EnvValue `
+            -Lines $envLines `
+            -Name "DJANGO_SUPERUSER_PASSWORD" `
+            -Value (New-RandomHex -Length 24)
+    }
 
-    $ComposeArguments = @(
-        "compose",
-        "--env-file", $EnvPath,
-        "-f", $ComposePath
+    # Yalnızca Windows için oluşturulan .env içerisinde 8080 kullanılır.
+    Set-EnvValue `
+        -Lines $envLines `
+        -Name "TFG_HTTP_PORT" `
+        -Value "8080"
+
+    Set-EnvValue `
+        -Lines $envLines `
+        -Name "DJANGO_SUPERUSER_USERNAME" `
+        -Value "admin"
+
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+    [System.IO.File]::WriteAllLines(
+        $envPath,
+        $envLines,
+        $utf8NoBom
     )
 
-    Write-Host "Docker Compose yapılandırması kontrol ediliyor..." `
+    $adminUser = Get-EnvValue `
+        -Lines $envLines `
+        -Name "DJANGO_SUPERUSER_USERNAME"
+
+    $adminPass = Get-EnvValue `
+        -Lines $envLines `
+        -Name "DJANGO_SUPERUSER_PASSWORD"
+
+    $httpPort = Get-EnvValue `
+        -Lines $envLines `
+        -Name "TFG_HTTP_PORT"
+
+    $composeArguments = @(
+        "compose",
+        "--project-directory", $projectPath,
+        "--env-file", $envPath,
+        "-f", $composePath
+    )
+
+    Write-Host "Docker Compose dosyası doğrulanıyor..." `
         -ForegroundColor Cyan
 
     Invoke-Docker `
-        -Arguments ($ComposeArguments + @("config", "--quiet")) `
+        -Arguments ($composeArguments + @("config", "--quiet")) `
         -Quiet
 
-    Write-Host "Docker image'ları indiriliyor..." `
+    Write-Host "Docker Hub image'ları indiriliyor..." `
         -ForegroundColor Cyan
 
     Invoke-Docker `
-        -Arguments ($ComposeArguments + @("pull"))
+        -Arguments ($composeArguments + @("pull"))
 
-    Write-Host "Servisler başlatılıyor..." `
+    Write-Host "USOM IOC Gateway servisleri başlatılıyor..." `
         -ForegroundColor Cyan
 
     Invoke-Docker `
         -Arguments (
-            $ComposeArguments +
+            $composeArguments +
             @("up", "-d", "--remove-orphans")
         )
 
@@ -301,15 +292,15 @@ Ardından kurulumu yeniden çalıştırın.
         -ForegroundColor Cyan
 
     Invoke-Docker `
-        -Arguments ($ComposeArguments + @("ps"))
+        -Arguments ($composeArguments + @("ps"))
 
     Write-Host ""
     Write-Host "Kurulum başarıyla tamamlandı." `
         -ForegroundColor Green
 
-    Write-Host "Adres          : http://localhost:$HttpPort"
-    Write-Host "Admin kullanıcı: $AdminUser"
-    Write-Host "Admin şifre    : $AdminPass" `
+    Write-Host "Adres          : http://localhost:$httpPort"
+    Write-Host "Admin kullanıcı: $adminUser"
+    Write-Host "Admin şifre    : $adminPass" `
         -ForegroundColor Yellow
 
     Write-Host ""
@@ -328,5 +319,5 @@ catch {
     exit 1
 }
 finally {
-    Set-Location $OriginalLocation
+    Set-Location $originalLocation
 }
