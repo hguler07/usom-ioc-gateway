@@ -244,7 +244,7 @@ sudo ./uninstall.sh --purge-docker
 ```mkdir C:\USOM -Force
 cd C:\USOM
 git clone https://github.com/hguler07/usom-ioc-gateway.git
-cd C:\USOM\usom-ioc-gateway
+cd .\usom-ioc-gateway
 powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall-windows.ps1
 ```
 ---
