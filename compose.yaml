@@ -157,7 +157,7 @@ services:
       "
 
   nginx:
-    image: hguler07/usom-ioc-gateway:nginx-0.1.18
+    image: hguler07/usom-ioc-gateway:nginx-0.1.19
     restart: always
     ports:
       - "${TFG_HTTP_PORT:-80}:8080"
