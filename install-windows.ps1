@@ -1,378 +1,133 @@
-# install-windows.ps1
-# compose.yaml ve .env.example dosyalarini degistirmez.
-# Windows kurulumu icin yerel .env dosyasi olusturur.
+Write-Host "USOM IOC Gateway Windows kurulumu başlıyor..." -ForegroundColor Cyan
 
-[CmdletBinding()]
-param()
-
-Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-function New-RandomHex {
-    param(
-        [int]$ByteLength = 32
-    )
-
-    $Bytes = [System.Array]::CreateInstance(
-        [byte],
-        $ByteLength
-    )
-
-    $Generator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-
-    try {
-        $Generator.GetBytes($Bytes)
-    }
-    finally {
-        $Generator.Dispose()
-    }
-
-    return -join (
-        $Bytes | ForEach-Object {
-            $_.ToString("x2")
-        }
-    )
+function New-Secret {
+    $bytes = New-Object byte[] 32
+    [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+    return [Convert]::ToBase64String($bytes)
 }
 
-function Set-EnvValue {
-    param(
-        [Parameter(Mandatory)]
-        [AllowEmptyString()]
-        [string]$Content,
-
-        [Parameter(Mandatory)]
-        [string]$Name,
-
-        [Parameter(Mandatory)]
-        [string]$Value,
-
-        [switch]$OnlyIfMissingOrPlaceholder
+function Set-Or-Add-EnvValue {
+    param (
+        [string]$Path,
+        [string]$Key,
+        [string]$Value
     )
 
-    $EscapedName = [Regex]::Escape($Name)
-    $Pattern = "(?m)^[ \t]*$EscapedName[ \t]*=(.*)$"
-    $Match = [Regex]::Match($Content, $Pattern)
+    $lines = Get-Content $Path -ErrorAction SilentlyContinue
 
-    if ($Match.Success) {
-        $CurrentValue = $Match.Groups[1].Value.Trim()
-        $CurrentValue = $CurrentValue.Trim(
-            [char[]]@('"', "'")
-        )
-
-        if (
-            $OnlyIfMissingOrPlaceholder -and
-            -not [string]::IsNullOrWhiteSpace($CurrentValue) -and
-            $CurrentValue -notmatch "^(CHANGE_ME|CHANGEME|REPLACE_ME)(_|$)"
-        ) {
-            return $Content
-        }
-
-        return [Regex]::Replace(
-            $Content,
-            $Pattern,
-            "$Name=$Value"
-        )
+    if ($lines -match "^$Key=") {
+        $lines = $lines -replace "^$Key=.*", "$Key=$Value"
+    } else {
+        $lines += "$Key=$Value"
     }
 
-    if (
-        $Content.Length -gt 0 -and
-        -not $Content.EndsWith("`n")
-    ) {
-        $Content += "`r`n"
-    }
-
-    return $Content + "$Name=$Value`r`n"
+    Set-Content -Path $Path -Value $lines -Encoding UTF8
 }
 
-function Get-EnvValue {
-    param(
-        [Parameter(Mandatory)]
-        [AllowEmptyString()]
-        [string]$Content,
-
-        [Parameter(Mandatory)]
-        [string]$Name
+function Replace-ChangeMe {
+    param (
+        [string]$Path,
+        [string]$Key
     )
 
-    $EscapedName = [Regex]::Escape($Name)
-    $Pattern = "(?m)^[ \t]*$EscapedName[ \t]*=(.*)$"
-    $Match = [Regex]::Match($Content, $Pattern)
+    $lines = Get-Content $Path -ErrorAction SilentlyContinue
+    $current = ($lines | Where-Object { $_ -match "^$Key=" } | Select-Object -First 1)
 
-    if (-not $Match.Success) {
-        throw ".env dosyasinda '$Name' degeri bulunamadi."
+    if (-not $current) {
+        $lines += "$Key=$(New-Secret)"
+        Set-Content -Path $Path -Value $lines -Encoding UTF8
+        return
     }
 
-    $Value = $Match.Groups[1].Value.Trim()
-
-    return $Value.Trim(
-        [char[]]@('"', "'")
-    )
-}
-
-function Invoke-DockerCommand {
-    param(
-        [Parameter(Mandatory)]
-        [string[]]$Arguments,
-
-        [switch]$Quiet
-    )
-
-    if ($Quiet) {
-        & docker @Arguments | Out-Null
-    }
-    else {
-        & docker @Arguments
-    }
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "Docker komutu basarisiz oldu: docker $($Arguments -join ' ')"
+    if ($current -match "^$Key=CHANGE_ME$" -or $current -match "^$Key=$") {
+        $newValue = New-Secret
+        $lines = $lines -replace "^$Key=.*", "$Key=$newValue"
+        Set-Content -Path $Path -Value $lines -Encoding UTF8
     }
 }
 
-$OriginalLocation = Get-Location
-$ExitCode = 0
-
-try {
-    Write-Host ""
-    Write-Host "USOM IOC Gateway Windows kurulumu baslatiliyor..." `
-        -ForegroundColor Cyan
-
-    $ProjectPath = $PSScriptRoot
-
-    if ([string]::IsNullOrWhiteSpace($ProjectPath)) {
-        throw "Kurulum dosyasinin bulundugu klasor tespit edilemedi."
-    }
-
-    $ProjectPath = (
-        Resolve-Path -LiteralPath $ProjectPath
-    ).Path
-
-    Set-Location -LiteralPath $ProjectPath
-
-    $ComposePath = Join-Path `
-        $ProjectPath `
-        "compose.yaml"
-
-    $EnvExamplePath = Join-Path `
-        $ProjectPath `
-        ".env.example"
-
-    $EnvPath = Join-Path `
-        $ProjectPath `
-        ".env"
-
-    Write-Host "Proje klasoru: $ProjectPath" `
-        -ForegroundColor DarkGray
-
-    if (-not (
-        Test-Path `
-            -LiteralPath $ComposePath `
-            -PathType Leaf
-    )) {
-        throw "compose.yaml bulunamadi: $ComposePath"
-    }
-
-    if (-not (
-        Test-Path `
-            -LiteralPath $EnvExamplePath `
-            -PathType Leaf
-    )) {
-        throw ".env.example bulunamadi: $EnvExamplePath"
-    }
-
-    if (-not (
-        Get-Command docker `
-            -ErrorAction SilentlyContinue
-    )) {
-        throw @"
-Docker komutu bulunamadi.
-
-Docker Desktop'i kurun ve PowerShell'i yeniden acin.
-"@
-    }
-
-    Write-Host "Docker Desktop kontrol ediliyor..." `
-        -ForegroundColor Cyan
-
-    & docker info *> $null
-
-    if ($LASTEXITCODE -ne 0) {
-        throw @"
-Docker Desktop kurulu ancak Docker Engine calismiyor.
-
-Docker Desktop'i acin ve Engine Running durumuna gelmesini bekleyin.
-"@
-    }
-
-    & docker compose version *> $null
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "Docker Compose calismiyor."
-    }
-
-    if (
-        -not (
-            Test-Path `
-                -LiteralPath $EnvPath `
-                -PathType Leaf
-        ) -or
-        (Get-Item -LiteralPath $EnvPath).Length -eq 0
-    ) {
-        Copy-Item `
-            -LiteralPath $EnvExamplePath `
-            -Destination $EnvPath `
-            -Force
-
-        Write-Host "Windows icin .env dosyasi olusturuldu." `
-            -ForegroundColor Green
-    }
-    else {
-        Write-Host "Mevcut .env dosyasi kullaniliyor." `
-            -ForegroundColor DarkGray
-    }
-
-    $EnvContent = [System.IO.File]::ReadAllText(
-        $EnvPath,
-        [System.Text.Encoding]::UTF8
-    )
-
-    if ([string]::IsNullOrWhiteSpace($EnvContent)) {
-        throw ".env dosyasi bos."
-    }
-
-    $EnvContent = Set-EnvValue `
-        -Content $EnvContent `
-        -Name "SECRET_KEY" `
-        -Value (New-RandomHex -ByteLength 32) `
-        -OnlyIfMissingOrPlaceholder
-
-    $EnvContent = Set-EnvValue `
-        -Content $EnvContent `
-        -Name "POSTGRES_PASSWORD" `
-        -Value (New-RandomHex -ByteLength 32) `
-        -OnlyIfMissingOrPlaceholder
-
-    $EnvContent = Set-EnvValue `
-        -Content $EnvContent `
-        -Name "DJANGO_SUPERUSER_PASSWORD" `
-        -Value (New-RandomHex -ByteLength 24) `
-        -OnlyIfMissingOrPlaceholder
-
-    $EnvContent = Set-EnvValue `
-        -Content $EnvContent `
-        -Name "DJANGO_SUPERUSER_USERNAME" `
-        -Value "admin" `
-        -OnlyIfMissingOrPlaceholder
-
-    # Ubuntu dosyalari degismez.
-    # Yalnizca Windows bilgisayarindaki .env 8080 kullanir.
-    $EnvContent = Set-EnvValue `
-        -Content $EnvContent `
-        -Name "TFG_HTTP_PORT" `
-        -Value "8080"
-
-    $Utf8NoBom = New-Object `
-        System.Text.UTF8Encoding($false)
-
-    [System.IO.File]::WriteAllText(
-        $EnvPath,
-        $EnvContent,
-        $Utf8NoBom
-    )
-
-    $AdminUser = Get-EnvValue `
-        -Content $EnvContent `
-        -Name "DJANGO_SUPERUSER_USERNAME"
-
-    $AdminPassword = Get-EnvValue `
-        -Content $EnvContent `
-        -Name "DJANGO_SUPERUSER_PASSWORD"
-
-    $HttpPort = Get-EnvValue `
-        -Content $EnvContent `
-        -Name "TFG_HTTP_PORT"
-
-    $ComposeArguments = @(
-        "compose",
-        "--project-name",
-        "usom-ioc-gateway",
-        "--project-directory",
-        $ProjectPath,
-        "--env-file",
-        $EnvPath,
-        "-f",
-        $ComposePath
-    )
-
-    Write-Host "Docker Compose yapilandirmasi kontrol ediliyor..." `
-        -ForegroundColor Cyan
-
-    Invoke-DockerCommand `
-        -Arguments (
-            $ComposeArguments +
-            @("config", "--quiet")
-        ) `
-        -Quiet
-
-    Write-Host "Docker Hub image dosyalari indiriliyor..." `
-        -ForegroundColor Cyan
-
-    Invoke-DockerCommand `
-        -Arguments (
-            $ComposeArguments +
-            @("pull")
-        )
-
-    Write-Host "USOM IOC Gateway servisleri baslatiliyor..." `
-        -ForegroundColor Cyan
-
-    Invoke-DockerCommand `
-        -Arguments (
-            $ComposeArguments +
-            @(
-                "up",
-                "-d",
-                "--remove-orphans"
-            )
-        )
-
-    Write-Host ""
-    Write-Host "Servis durumu:" `
-        -ForegroundColor Cyan
-
-    Invoke-DockerCommand `
-        -Arguments (
-            $ComposeArguments +
-            @("ps")
-        )
-
-    Write-Host ""
-    Write-Host "Kurulum basariyla tamamlandi." `
-        -ForegroundColor Green
-
-    Write-Host "Adres          : http://localhost:$HttpPort"
-    Write-Host "Admin kullanici: $AdminUser"
-    Write-Host "Admin sifre    : $AdminPassword" `
-        -ForegroundColor Yellow
-
-    Write-Host ""
-    Write-Host "Admin sifresini guvenli bir yerde saklayin." `
-        -ForegroundColor DarkYellow
-}
-catch {
-    $ExitCode = 1
-
-    Write-Host ""
-    Write-Host "KURULUM BASARISIZ OLDU" `
-        -ForegroundColor Red
-
-    Write-Host $_.Exception.Message `
-        -ForegroundColor Red
-
-    Write-Host ""
-}
-finally {
-    Set-Location -LiteralPath $OriginalLocation.Path
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    Write-Host "HATA: Docker bulunamadı." -ForegroundColor Red
+    Write-Host "Lütfen Docker Desktop kurun ve çalıştırın."
+    exit 1
 }
 
-exit $ExitCode
+docker version | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "HATA: Docker Desktop çalışmıyor." -ForegroundColor Red
+    Write-Host "Lütfen Docker Desktop'ı başlatın ve tekrar deneyin."
+    exit 1
+}
+
+docker compose version | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "HATA: Docker Compose çalışmıyor." -ForegroundColor Red
+    Write-Host "Docker Desktop içinde Compose desteğini kontrol edin."
+    exit 1
+}
+
+if (-not (Test-Path "compose.yaml")) {
+    Write-Host "HATA: compose.yaml bulunamadı." -ForegroundColor Red
+    Write-Host "Bu script'i GitHub repo klasörü içinde çalıştırmalısınız."
+    exit 1
+}
+
+if (-not (Test-Path ".env.example")) {
+    Write-Host "HATA: .env.example bulunamadı." -ForegroundColor Red
+    exit 1
+}
+
+if (-not (Test-Path ".env")) {
+    Copy-Item ".env.example" ".env"
+    Write-Host ".env dosyası oluşturuldu."
+} else {
+    Write-Host ".env zaten var, mevcut ayarlar korunacak."
+}
+
+Replace-ChangeMe -Path ".env" -Key "SECRET_KEY"
+Replace-ChangeMe -Path ".env" -Key "POSTGRES_PASSWORD"
+Replace-ChangeMe -Path ".env" -Key "DJANGO_SUPERUSER_PASSWORD"
+
+Set-Or-Add-EnvValue -Path ".env" -Key "TFG_HTTP_PORT" -Value "8080"
+
+$compose = Get-Content "compose.yaml" -Raw
+$compose = $compose -replace "hguler07/usom-ioc-gateway:backend-[0-9]+\.[0-9]+\.[0-9]+", "hguler07/usom-ioc-gateway:backend-0.1.16"
+$compose = $compose -replace "hguler07/usom-ioc-gateway:nginx-[0-9]+\.[0-9]+\.[0-9]+", "hguler07/usom-ioc-gateway:nginx-0.1.18"
+Set-Content -Path "compose.yaml" -Value $compose -Encoding UTF8
+
+Write-Host "Compose dosyası kontrol ediliyor..." -ForegroundColor Cyan
+docker compose -f compose.yaml config | Out-Null
+
+Write-Host "Docker image'ları indiriliyor..." -ForegroundColor Cyan
+docker compose -f compose.yaml pull
+
+Write-Host "Servisler başlatılıyor..." -ForegroundColor Cyan
+docker compose -f compose.yaml up -d --remove-orphans
+
+Write-Host ""
+Write-Host "Container durumu:" -ForegroundColor Cyan
+docker compose -f compose.yaml ps
+
+$adminUser = "admin"
+$adminPass = ""
+$httpPort = "8080"
+
+$envLines = Get-Content ".env"
+
+$userLine = $envLines | Where-Object { $_ -match "^DJANGO_SUPERUSER_USERNAME=" } | Select-Object -First 1
+$passLine = $envLines | Where-Object { $_ -match "^DJANGO_SUPERUSER_PASSWORD=" } | Select-Object -First 1
+$portLine = $envLines | Where-Object { $_ -match "^TFG_HTTP_PORT=" } | Select-Object -First 1
+
+if ($userLine) { $adminUser = $userLine.Split("=", 2)[1] }
+if ($passLine) { $adminPass = $passLine.Split("=", 2)[1] }
+if ($portLine) { $httpPort = $portLine.Split("=", 2)[1] }
+
+Write-Host ""
+Write-Host "Kurulum tamamlandı." -ForegroundColor Green
+Write-Host "Adres          : http://localhost:$httpPort"
+Write-Host "Kullanıcı adı  : $adminUser"
+Write-Host "Admin şifre    : $adminPass"
+Write-Host ""
+Write-Host "İlk açılışta backend servisleri hazırlanırken kısa süre 502 görülebilir. 1-2 dakika bekleyip sayfayı yenileyin."
