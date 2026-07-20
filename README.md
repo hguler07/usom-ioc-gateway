@@ -138,7 +138,6 @@ Varsayılan erişim adresi:
 ```text
 http://localhost:8080
 ```
-
 ---
 ## Feed Adresleri
 
@@ -222,7 +221,7 @@ docker compose -f compose.yaml up -d --remove-orphans
 
 ---
 
-## Kaldırma
+## Ubuntu Kaldırma
 
 USOM IOC Gateway servislerini kaldırmak için:
 
@@ -240,4 +239,9 @@ sudo ./uninstall.sh --purge-docker
 
 > Aynı sunucuda başka Docker servisleri çalışıyorsa `--purge-docker` parametresi kullanılmamalıdır.
 
+---
+## Windows Kaldırma
+```cd C:\USOM\usom-ioc-gateway
+powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall-windows.ps1
+```
 ---
