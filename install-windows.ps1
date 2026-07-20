@@ -4,7 +4,7 @@
 $ErrorActionPreference = "Stop"
 
 $BackendImage = "hguler07/usom-ioc-gateway:backend-0.1.16"
-$NginxImage   = "hguler07/usom-ioc-gateway:nginx-0.1.18"
+$NginxImage   = "hguler07/usom-ioc-gateway:nginx-0.1.19"
 $DefaultPort  = "8080"
 
 function New-RandomHex {
