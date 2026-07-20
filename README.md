@@ -241,7 +241,10 @@ sudo ./uninstall.sh --purge-docker
 
 ---
 ## Windows Kaldırma
-```cd C:\USOM\usom-ioc-gateway
+```mkdir C:\USOM -Force
+cd C:\USOM
+git clone https://github.com/hguler07/usom-ioc-gateway.git
+cd C:\USOM\usom-ioc-gateway
 powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall-windows.ps1
 ```
 ---
