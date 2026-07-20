@@ -1,4 +1,3 @@
-@'
 # USOM IOC Gateway - Windows Docker Installer
 # Compatible with Windows PowerShell 5.1 and PowerShell 7+
 
@@ -6,6 +5,7 @@ $ErrorActionPreference = "Stop"
 
 $BackendImage = "hguler07/usom-ioc-gateway:backend-0.1.16"
 $NginxImage   = "hguler07/usom-ioc-gateway:nginx-0.1.18"
+$DefaultPort  = "8080"
 
 function New-RandomHex {
     param(
@@ -25,77 +25,89 @@ function New-RandomHex {
     return -join ($bytes | ForEach-Object { $_.ToString("x2") })
 }
 
-function Set-EnvValue {
+function Set-DotEnvValue {
     param(
         [string]$Content,
         [string]$Name,
         [string]$Value,
-        [bool]$OnlyIfMissingOrPlaceholder = $false
+        [bool]$OnlyIfEmptyOrPlaceholder = $false
     )
 
-    $escapedName = [Regex]::Escape($Name)
-    $pattern = "(?m)^[ \t]*$escapedName[ \t]*=.*$"
-    $match = [Regex]::Match($Content, $pattern)
-
-    if ($match.Success) {
-        $currentLine = $match.Value
-        $currentValue = ""
-
-        if ($currentLine.Contains("=")) {
-            $currentValue = $currentLine.Substring($currentLine.IndexOf("=") + 1).Trim().Trim('"').Trim("'")
-        }
-
-        if ($OnlyIfMissingOrPlaceholder -and `
-            -not [string]::IsNullOrWhiteSpace($currentValue) -and `
-            $currentValue -ne "CHANGE_ME" -and `
-            $currentValue -ne "CHANGEME" -and `
-            $currentValue -ne "REPLACE_ME") {
-            return $Content
-        }
-
-        return [Regex]::Replace($Content, $pattern, "$Name=$Value")
+    if ($null -eq $Content) {
+        $Content = ""
     }
 
-    if (-not $Content.EndsWith("`n") -and $Content.Length -gt 0) {
-        $Content += "`r`n"
+    $lines = @()
+    if ($Content.Length -gt 0) {
+        $lines = $Content -split "`r?`n"
     }
 
-    return $Content + "$Name=$Value`r`n"
+    $output = New-Object System.Collections.Generic.List[string]
+    $found = $false
+    $existingValue = ""
+
+    foreach ($line in $lines) {
+        if ($line -match "^[ \t]*$([Regex]::Escape($Name))[ \t]*=") {
+            if (-not $found) {
+                $found = $true
+                $existingValue = ($line -replace "^[ \t]*$([Regex]::Escape($Name))[ \t]*=", "").Trim().Trim('"').Trim("'")
+
+                if ($OnlyIfEmptyOrPlaceholder -and `
+                    -not [string]::IsNullOrWhiteSpace($existingValue) -and `
+                    $existingValue -ne "CHANGE_ME" -and `
+                    $existingValue -ne "CHANGEME" -and `
+                    $existingValue -ne "REPLACE_ME") {
+                    $output.Add("$Name=$existingValue")
+                }
+                else {
+                    $output.Add("$Name=$Value")
+                }
+            }
+
+            continue
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($line)) {
+            $output.Add($line)
+        }
+    }
+
+    if (-not $found) {
+        $output.Add("$Name=$Value")
+    }
+
+    return (($output.ToArray()) -join "`r`n") + "`r`n"
 }
 
-function Get-EnvValue {
+function Get-DotEnvValue {
     param(
         [string]$Content,
         [string]$Name,
         [string]$DefaultValue = ""
     )
 
-    $escapedName = [Regex]::Escape($Name)
-    $pattern = "(?m)^[ \t]*$escapedName[ \t]*=(.*)$"
-    $match = [Regex]::Match($Content, $pattern)
-
-    if (-not $match.Success) {
+    if ($null -eq $Content) {
         return $DefaultValue
     }
 
-    return $match.Groups[1].Value.Trim().Trim('"').Trim("'")
+    foreach ($line in ($Content -split "`r?`n")) {
+        if ($line -match "^[ \t]*$([Regex]::Escape($Name))[ \t]*=") {
+            return (($line -replace "^[ \t]*$([Regex]::Escape($Name))[ \t]*=", "").Trim().Trim('"').Trim("'"))
+        }
+    }
+
+    return $DefaultValue
 }
 
-function Invoke-Docker {
+function Invoke-DockerCommand {
     param(
-        [string[]]$Arguments
+        [string[]]$DockerArgs
     )
 
-    & docker @Arguments
+    & docker @DockerArgs
 
     if ($LASTEXITCODE -ne 0) {
-        throw "Docker command failed: docker $($Arguments -join ' ')"
-    }
-}
-
-try {
-    Write-EXITCODE -ne 0) {
-        throw "Docker command failed: docker $($Arguments -join ' ')"
+        throw "Docker command failed: docker $($DockerArgs -join ' ')"
     }
 }
 
@@ -112,7 +124,7 @@ try {
     $ProjectPath = (Resolve-Path -LiteralPath $ProjectPath).Path
 
     if ($ProjectPath.ToLower().StartsWith("c:\windows\system32")) {
-        throw "Do not install under C:\Windows\System32. Use a folder like C:\USOM\usom-ioc-gateway."
+        throw "Do not install under C:\Windows\System32. Use C:\USOM\usom-ioc-gateway."
     }
 
     Set-Location -LiteralPath $ProjectPath
@@ -124,11 +136,11 @@ try {
     Write-Host "Project path: $ProjectPath" -ForegroundColor DarkGray
 
     if (-not (Test-Path -LiteralPath $ComposePath -PathType Leaf)) {
-        throw "compose.yaml not found."
+        throw "compose.yaml not found. Run this script inside the repository folder."
     }
 
     if (-not (Test-Path -LiteralPath $EnvExamplePath -PathType Leaf)) {
-        throw ".env.example not found."
+        throw ".env.example not found. Run this script inside the repository folder."
     }
 
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
@@ -136,7 +148,6 @@ try {
     }
 
     Write-Host "Checking Docker Desktop..." -ForegroundColor Cyan
-
     & docker info *> $null
 
     if ($LASTEXITCODE -ne 0) {
@@ -146,40 +157,52 @@ try {
     & docker compose version *> $null
 
     if ($LASTEXITCODE -ne 0) {
-        throw "Docker Compose is not available."
+        throw "Docker Compose is not available. Update Docker Desktop."
     }
 
-    if (-not (Test-Path -LiteralPath $EnvPath -PathType Leaf) -or (Get-Item -LiteralPath $EnvPath).Length -eq 0) {
+    if (-not (Test-Path -LiteralPath $EnvPath -PathType Leaf)) {
         Copy-Item -LiteralPath $EnvExamplePath -Destination $EnvPath -Force
         Write-Host ".env file created." -ForegroundColor Green
     }
+    elseif ((Get-Item -LiteralPath $EnvPath).Length -eq 0) {
+        Copy-Item -LiteralPath $EnvExamplePath -Destination $EnvPath -Force
+        Write-Host ".env file recreated because it was empty." -ForegroundColor Green
+    }
     else {
-        Write-Host ".env already exists. Existing values will be preserved." -ForegroundColor DarkGray
+        Write-Host ".env already exists. Existing passwords will be preserved." -ForegroundColor DarkGray
     }
 
     $EnvContent = [System.IO.File]::ReadAllText($EnvPath, [System.Text.Encoding]::UTF8)
 
-    if ([string]::IsNullOrWhiteSpace($EnvContent)) {
-        $EnvContent = ""
-    }
-
-    $EnvContent = Set-EnvValue -Content $EnvContent -Name "SECRET_KEY" -Value (New-RandomHex -ByteLength 32) -OnlyIfMissingOrPlaceholder $true
-    $EnvContent = Set-EnvValue -Content $EnvContent -Name "POSTGRES_PASSWORD" -Value (New-RandomHex -ByteLength 32) -OnlyIfMissingOrPlaceholder $true
-    $EnvContent = Set-EnvValue -Content $EnvContent -Name "DJANGO_SUPERUSER_PASSWORD" -Value (New-RandomHex -ByteLength 24) -OnlyIfMissingOrPlaceholder $true
-    $EnvContent = Set-EnvValue -Content $EnvContent -Name "DJANGO_SUPERUSER_USERNAME" -Value "admin" -OnlyIfMissingOrPlaceholder $true
-    $EnvContent = Set-EnvValue -Content $EnvContent -Name "TFG_HTTP_PORT" -Value "8080" -OnlyIfMissingOrPlaceholder $false
+    $EnvContent = Set-DotEnvValue -Content $EnvContent -Name "SECRET_KEY" -Value (New-RandomHex -ByteLength 32) -OnlyIfEmptyOrPlaceholder $true
+    $EnvContent = Set-DotEnvValue -Content $EnvContent -Name "POSTGRES_PASSWORD" -Value (New-RandomHex -ByteLength 32) -OnlyIfEmptyOrPlaceholder $true
+    $EnvContent = Set-DotEnvValue -Content $EnvContent -Name "DJANGO_SUPERUSER_PASSWORD" -Value (New-RandomHex -ByteLength 24) -OnlyIfEmptyOrPlaceholder $true
+    $EnvContent = Set-DotEnvValue -Content $EnvContent -Name "DJANGO_SUPERUSER_USERNAME" -Value "admin" -OnlyIfEmptyOrPlaceholder $true
+    $EnvContent = Set-DotEnvValue -Content $EnvContent -Name "DJANGO_SUPERUSER_EMAIL" -Value "admin@example.local" -OnlyIfEmptyOrPlaceholder $true
+    $EnvContent = Set-DotEnvValue -Content $EnvContent -Name "TFG_HTTP_PORT" -Value $DefaultPort -OnlyIfEmptyOrPlaceholder $false
 
     $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($EnvPath, $EnvContent, $Utf8NoBom)
 
     $ComposeContent = [System.IO.File]::ReadAllText($ComposePath, [System.Text.Encoding]::UTF8)
-    $ComposeContent = $ComposeContent -replace "hguler07/usom-ioc-gateway:backend-[0-9]+\.[0-9]+\.[0-9]+", $BackendImage
-    $ComposeContent = $ComposeContent -replace "hguler07/usom-ioc-gateway:nginx-[0-9]+\.[0-9]+\.[0-9]+", $NginxImage
+
+    $ComposeContent = [Regex]::Replace(
+        $ComposeContent,
+        "(?m)^([ \t]*image:[ \t]*)hguler07/usom-ioc-gateway:backend[^ \t`r`n#]*",
+        "`${1}$BackendImage"
+    )
+
+    $ComposeContent = [Regex]::Replace(
+        $ComposeContent,
+        "(?m)^([ \t]*image:[ \t]*)hguler07/usom-ioc-gateway:nginx[^ \t`r`n#]*",
+        "`${1}$NginxImage"
+    )
+
     [System.IO.File]::WriteAllText($ComposePath, $ComposeContent, $Utf8NoBom)
 
-    $AdminUser = Get-EnvValue -Content $EnvContent -Name "DJANGO_SUPERUSER_USERNAME" -DefaultValue "admin"
-    $AdminPassword = Get-EnvValue -Content $EnvContent -Name "DJANGO_SUPERUSER_PASSWORD" -DefaultValue ""
-    $HttpPort = Get-EnvValue -Content $EnvContent -Name "TFG_HTTP_PORT" -DefaultValue "8080"
+    $AdminUser = Get-DotEnvValue -Content $EnvContent -Name "DJANGO_SUPERUSER_USERNAME" -DefaultValue "admin"
+    $AdminPassword = Get-DotEnvValue -Content $EnvContent -Name "DJANGO_SUPERUSER_PASSWORD" -DefaultValue ""
+    $HttpPort = Get-DotEnvValue -Content $EnvContent -Name "TFG_HTTP_PORT" -DefaultValue $DefaultPort
 
     $ComposeArgs = @(
         "compose",
@@ -190,17 +213,17 @@ try {
     )
 
     Write-Host "Checking Docker Compose config..." -ForegroundColor Cyan
-    Invoke-Docker -Arguments ($ComposeArgs + @("config", "--quiet"))
+    Invoke-DockerCommand -DockerArgs ($ComposeArgs + @("config"))
 
     Write-Host "Pulling Docker images..." -ForegroundColor Cyan
-    Invoke-Docker -Arguments ($ComposeArgs + @("pull"))
+    Invoke-DockerCommand -DockerArgs ($ComposeArgs + @("pull"))
 
     Write-Host "Starting services..." -ForegroundColor Cyan
-    Invoke-Docker -Arguments ($ComposeArgs + @("up", "-d", "--remove-orphans"))
+    Invoke-DockerCommand -DockerArgs ($ComposeArgs + @("up", "-d", "--remove-orphans"))
 
     Write-Host ""
     Write-Host "Container status:" -ForegroundColor Cyan
-    Invoke-Docker -Arguments ($ComposeArgs + @("ps"))
+    Invoke-DockerCommand -DockerArgs ($ComposeArgs + @("ps"))
 
     Write-Host ""
     Write-Host "Installation completed successfully." -ForegroundColor Green
@@ -218,6 +241,6 @@ catch {
     Write-Host "INSTALLATION FAILED" -ForegroundColor Red
     Write-Host $_.Exception.Message -ForegroundColor Red
     Write-Host ""
+
     exit 1
 }
-'@ | Set-Content -Path .\install-windows.ps1 -Encoding UTF8
