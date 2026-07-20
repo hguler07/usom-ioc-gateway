@@ -126,10 +126,11 @@ Gereksinimler:
 
 PowerShell’i Yönetici olarak açıp aşağıdaki komutları çalıştırabilirsiniz:
 
-```powershell
+```mkdir C:\USOM -Force
+cd C:\USOM
 git clone https://github.com/hguler07/usom-ioc-gateway.git
-cd usom-ioc-gateway
-powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
+cd .\usom-ioc-gateway
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install-windows.ps1
 ```
 
 Varsayılan erişim adresi:
@@ -139,34 +140,6 @@ http://localhost:8080
 ```
 
 ---
-
-## macOS Kurulumu
-
-Gereksinimler:
-
-* Docker Desktop for Mac
-* Git
-* Terminal
-
-Kurulum:
-
-```bash
-git clone https://github.com/hguler07/usom-ioc-gateway.git
-cd usom-ioc-gateway
-cp .env.example .env
-echo "TFG_HTTP_PORT=8080" >> .env
-docker compose -f compose.yaml pull
-docker compose -f compose.yaml up -d
-```
-
-Varsayılan erişim adresi:
-
-```text
-http://localhost:8080
-```
-
----
-
 ## Feed Adresleri
 
 IOC feed çıktıları `/feeds/` altında yayınlanır.
