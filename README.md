@@ -240,11 +240,3 @@ sudo ./uninstall.sh --purge-docker
 > Aynı sunucuda başka Docker servisleri çalışıyorsa `--purge-docker` parametresi kullanılmamalıdır.
 
 ---
-## Windows Kaldırma
-```mkdir C:\USOM -Force
-cd C:\USOM
-git clone https://github.com/hguler07/usom-ioc-gateway.git
-cd .\usom-ioc-gateway
-powershell -NoProfile -ExecutionPolicy Bypass -File .\uninstall-windows.ps1
-```
----
