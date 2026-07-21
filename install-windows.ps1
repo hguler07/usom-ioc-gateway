@@ -7,6 +7,143 @@ $BackendImage = "hguler07/usom-ioc-gateway:backend-latest"
 $NginxImage   = "hguler07/usom-ioc-gateway:nginx-latest"
 $DefaultPort  = "8080"
 
+# When this script is executed directly from GitHub (irm ... | iex),
+# prepare C:\USOM, download/update the repository, then run the local copy.
+$InstallRoot = "C:\USOM"
+$RepositoryPath = Join-Path $InstallRoot "usom-ioc-gateway"
+$RepositoryUrl = "https://github.com/hguler07/usom-ioc-gateway.git"
+$CurrentScriptPath = $MyInvocation.MyCommand.Path
+$RunningFromLocalFile = `
+    -not [string]::IsNullOrWhiteSpace($CurrentScriptPath) -and `
+    (Test-Path -LiteralPath $CurrentScriptPath -PathType Leaf)
+
+function Find-GitExecutable {
+    $gitCommand = Get-Command git.exe -ErrorAction SilentlyContinue
+
+    if ($null -ne $gitCommand) {
+        return $gitCommand.Source
+    }
+
+    $candidates = @(
+        "$env:ProgramFiles\Git\cmd\git.exe",
+        "${env:ProgramFiles(x86)}\Git\cmd\git.exe",
+        "$env:LOCALAPPDATA\Programs\Git\cmd\git.exe"
+    )
+
+    foreach ($candidate in $candidates) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and `
+            (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Install-GitIfMissing {
+    $gitExecutable = Find-GitExecutable
+
+    if (-not [string]::IsNullOrWhiteSpace($gitExecutable)) {
+        return $gitExecutable
+    }
+
+    $wingetCommand = Get-Command winget.exe -ErrorAction SilentlyContinue
+
+    if ($null -eq $wingetCommand) {
+        throw "Git is not installed and Windows Package Manager (winget) is unavailable. Install Git for Windows first."
+    }
+
+    Write-Host "Git is not installed. Installing Git for Windows..." -ForegroundColor Cyan
+
+    & $wingetCommand.Source install `
+        --id Git.Git `
+        --exact `
+        --source winget `
+        --accept-package-agreements `
+        --accept-source-agreements `
+        --silent
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Git installation failed."
+    }
+
+    $gitExecutable = Find-GitExecutable
+
+    if ([string]::IsNullOrWhiteSpace($gitExecutable)) {
+        throw "Git was installed, but git.exe could not be found. Open a new PowerShell window and run the command again."
+    }
+
+    return $gitExecutable
+}
+
+function Start-RepositoryBootstrap {
+    Write-Host "" 
+    Write-Host "USOM IOC Gateway installation is being prepared..." -ForegroundColor Cyan
+
+    # Avoid operating from a deleted, renamed, or locked repository directory.
+    Set-Location -LiteralPath "C:\"
+
+    New-Item -Path $InstallRoot -ItemType Directory -Force | Out-Null
+
+    $gitExecutable = Install-GitIfMissing
+
+    if (Test-Path -LiteralPath (Join-Path $RepositoryPath ".git") -PathType Container) {
+        Write-Host "Existing installation found. Updating repository..." -ForegroundColor Cyan
+
+        & $gitExecutable -C $RepositoryPath pull --ff-only
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Repository update failed. Check local changes or network access."
+        }
+    }
+    else {
+        if (Test-Path -LiteralPath $RepositoryPath) {
+            $backupPath = "$RepositoryPath-old-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+            Write-Host "Incomplete project folder is being preserved as: $backupPath" -ForegroundColor Yellow
+            Move-Item -LiteralPath $RepositoryPath -Destination $backupPath -Force
+        }
+
+        Write-Host "Downloading project from GitHub..." -ForegroundColor Cyan
+
+        & $gitExecutable clone --branch main --single-branch $RepositoryUrl $RepositoryPath
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Repository download failed."
+        }
+    }
+
+    $localInstaller = Join-Path $RepositoryPath "install-windows.ps1"
+
+    if (-not (Test-Path -LiteralPath $localInstaller -PathType Leaf)) {
+        throw "Local installer was not found: $localInstaller"
+    }
+
+    Write-Host "Starting local installer..." -ForegroundColor Green
+
+    & powershell.exe `
+        -NoProfile `
+        -ExecutionPolicy Bypass `
+        -File $localInstaller
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "USOM IOC Gateway installation failed."
+    }
+}
+
+if (-not $RunningFromLocalFile) {
+    try {
+        Start-RepositoryBootstrap
+    }
+    catch {
+        Write-Host ""
+        Write-Host "INSTALLATION FAILED" -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Red
+        Write-Host ""
+    }
+
+    return
+}
+
 function New-RandomHex {
     param(
         [int]$ByteLength = 32
