@@ -7,22 +7,17 @@
 <p>
   <img alt="Docker" src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white">
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white">
-  <img alt="Platform" src="https://img.shields.io/badge/Platform-Ubuntu%20%7C%20Windows-2F3437">
+  <img alt="Ubuntu" src="https://img.shields.io/badge/Ubuntu-Supported-E95420?logo=ubuntu&logoColor=white">
+  <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows11&logoColor=white">
 </p>
 
 <p>
   <a href="./README.md">
-    <img alt="Türkçe" src="https://img.shields.io/badge/Dil-T%C3%BCrk%C3%A7e-E30A17">
+    <img alt="Türkçe" src="https://img.shields.io/badge/Language-T%C3%BCrk%C3%A7e-0F766E">
   </a>
   <a href="./README_EN.md">
     <img alt="English" src="https://img.shields.io/badge/Language-English-1F6FEB">
   </a>
-</p>
-
-</div>
-
-<p align="center">
-  <img src="./usom-ioc-gateway-dashboard.png" alt="USOM IOC Gateway web paneli" width="100%">
 </p>
 
 ## Nedir?
