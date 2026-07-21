@@ -20,7 +20,7 @@
 </div>
 
 <p align="center">
-  <img src="./usom-ioc-gateway-dashboard.png" alt="USOM IOC Gateway yönetim paneli" width="100%">
+  <img src="./TR.png" alt="USOM IOC Gateway yönetim paneli" width="100%">
 </p>
 
 <p align="center">
