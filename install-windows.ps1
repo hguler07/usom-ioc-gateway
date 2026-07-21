@@ -13,37 +13,16 @@ catch {
 $DefaultPort  = "8080"
 
 # When this script is executed directly from GitHub (irm ... | iex),
-# prepare C:\USOM, download/update the repository, then run the local copy.
+# prepare C:\USOM, download the repository as a ZIP archive, then run the
+# local copy. Git is not required.
 $InstallRoot = "C:\USOM"
 $RepositoryPath = Join-Path $InstallRoot "usom-ioc-gateway"
-$RepositoryUrl = "https://github.com/hguler07/usom-ioc-gateway.git"
+$RepositoryArchiveUrl = "https://github.com/hguler07/usom-ioc-gateway/archive/refs/heads/main.zip"
+$RepositoryArchiveFolder = "usom-ioc-gateway-main"
 $CurrentScriptPath = $MyInvocation.MyCommand.Path
 $RunningFromLocalFile = `
     -not [string]::IsNullOrWhiteSpace($CurrentScriptPath) -and `
     (Test-Path -LiteralPath $CurrentScriptPath -PathType Leaf)
-
-function Find-GitExecutable {
-    $gitCommand = Get-Command git.exe -ErrorAction SilentlyContinue
-
-    if ($null -ne $gitCommand) {
-        return $gitCommand.Source
-    }
-
-    $candidates = @(
-        "$env:ProgramFiles\Git\cmd\git.exe",
-        "${env:ProgramFiles(x86)}\Git\cmd\git.exe",
-        "$env:LOCALAPPDATA\Programs\Git\cmd\git.exe"
-    )
-
-    foreach ($candidate in $candidates) {
-        if (-not [string]::IsNullOrWhiteSpace($candidate) -and `
-            (Test-Path -LiteralPath $candidate -PathType Leaf)) {
-            return $candidate
-        }
-    }
-
-    return $null
-}
 
 function Invoke-DownloadFile {
     param(
@@ -51,7 +30,9 @@ function Invoke-DownloadFile {
         [string]$Uri,
 
         [Parameter(Mandatory = $true)]
-        [string]$Destination
+        [string]$Destination,
+
+        [long]$MinimumBytes = 1024
     )
 
     $destinationDirectory = Split-Path -Parent $Destination
@@ -71,168 +52,102 @@ function Invoke-DownloadFile {
         throw "Downloaded file was not created: $Destination"
     }
 
-    if ((Get-Item -LiteralPath $Destination).Length -lt 1MB) {
+    if ((Get-Item -LiteralPath $Destination).Length -lt $MinimumBytes) {
         throw "Downloaded file is unexpectedly small: $Destination"
     }
 }
 
-function Install-GitFromOfficialRelease {
-    Write-Host "Downloading Git for Windows from the official release repository..." -ForegroundColor Cyan
-
-    $release = Invoke-RestMethod `
-        -Uri "https://api.github.com/repos/git-for-windows/git/releases/latest" `
-        -Headers @{ "User-Agent" = "USOM-IOC-Gateway-Installer" } `
-        -UseBasicParsing `
-        -ErrorAction Stop
-
-    $asset = $release.assets |
-        Where-Object { $_.name -match '^Git-[0-9].*-64-bit\.exe$' } |
-        Select-Object -First 1
-
-    if ($null -eq $asset -or [string]::IsNullOrWhiteSpace($asset.browser_download_url)) {
-        throw "The latest official Git for Windows x64 installer could not be located."
-    }
-
-    $installerPath = Join-Path $env:TEMP $asset.name
-
-    try {
-        Invoke-DownloadFile -Uri $asset.browser_download_url -Destination $installerPath
-
-        Write-Host "Installing Git for Windows..." -ForegroundColor Cyan
-
-        $process = Start-Process `
-            -FilePath $installerPath `
-            -ArgumentList @(
-                "/VERYSILENT",
-                "/NORESTART",
-                "/NOCANCEL",
-                "/SP-",
-                "/CLOSEAPPLICATIONS"
-            ) `
-            -Wait `
-            -PassThru
-
-        if ($process.ExitCode -ne 0) {
-            throw "Git for Windows installer returned exit code $($process.ExitCode)."
-        }
-    }
-    finally {
-        Remove-Item -LiteralPath $installerPath -Force -ErrorAction SilentlyContinue
-    }
-}
-
-function Install-GitIfMissing {
-    $gitExecutable = Find-GitExecutable
-
-    if (-not [string]::IsNullOrWhiteSpace($gitExecutable)) {
-        Write-Host "Git detected: $gitExecutable" -ForegroundColor DarkGray
-        return $gitExecutable
-    }
-
-    Write-Host "Git is not installed." -ForegroundColor Yellow
-
-    $wingetCommand = Get-Command winget.exe -ErrorAction SilentlyContinue
-    $wingetSucceeded = $false
-
-    if ($null -ne $wingetCommand) {
-        Write-Host "Trying Git installation with Windows Package Manager..." -ForegroundColor Cyan
-
-        $wingetOutput = & $wingetCommand.Source install `
-            --id Git.Git `
-            --exact `
-            --source winget `
-            --accept-package-agreements `
-            --accept-source-agreements `
-            --silent 2>&1
-
-        $wingetExitCode = $LASTEXITCODE
-        $wingetOutput | Out-Host
-        $wingetSucceeded = ($wingetExitCode -eq 0)
-
-        if (-not $wingetSucceeded) {
-            Write-Host "winget installation was not successful. Official direct download will be used." -ForegroundColor Yellow
-        }
-    }
-    else {
-        Write-Host "winget is unavailable. Official direct download will be used." -ForegroundColor Yellow
-    }
-
-    if ($wingetSucceeded) {
-        Start-Sleep -Seconds 2
-        $gitExecutable = Find-GitExecutable
-
-        if (-not [string]::IsNullOrWhiteSpace($gitExecutable)) {
-            Write-Host "Git installed successfully." -ForegroundColor Green
-            return $gitExecutable
-        }
-
-        Write-Host "winget reported success, but git.exe was not found. Official direct download will be tried." -ForegroundColor Yellow
-    }
-
-    Install-GitFromOfficialRelease
-    Start-Sleep -Seconds 2
-
-    $gitExecutable = Find-GitExecutable
-
-    if ([string]::IsNullOrWhiteSpace($gitExecutable)) {
-        throw "Git installation completed, but git.exe could not be found."
-    }
-
-    Write-Host "Git installed successfully." -ForegroundColor Green
-    return $gitExecutable
-}
-
 function Start-RepositoryBootstrap {
-    Write-Host "" 
+    Write-Host ""
     Write-Host "USOM IOC Gateway installation is being prepared..." -ForegroundColor Cyan
 
-    # Avoid operating from a deleted, renamed, or locked repository directory.
+    # Avoid operating from a deleted, renamed, or locked project directory.
     Set-Location -LiteralPath "C:\"
 
     New-Item -Path $InstallRoot -ItemType Directory -Force | Out-Null
 
-    $gitExecutable = Install-GitIfMissing
+    $operationId = [Guid]::NewGuid().ToString("N")
+    $archivePath = Join-Path $env:TEMP "usom-ioc-gateway-$operationId.zip"
+    $extractPath = Join-Path $env:TEMP "usom-ioc-gateway-$operationId"
+    $preservedEnvPath = Join-Path $env:TEMP "usom-ioc-gateway-$operationId.env"
+    $existingEnvPath = Join-Path $RepositoryPath ".env"
 
-    if (Test-Path -LiteralPath (Join-Path $RepositoryPath ".git") -PathType Container) {
-        Write-Host "Existing installation found. Updating repository..." -ForegroundColor Cyan
-
-        & $gitExecutable -C $RepositoryPath pull --ff-only
-
-        if ($LASTEXITCODE -ne 0) {
-            throw "Repository update failed. Check local changes or network access."
+    try {
+        # Preserve generated passwords while refreshing the installation files.
+        # The local installer still asks whether a clean installation is wanted.
+        if (Test-Path -LiteralPath $existingEnvPath -PathType Leaf) {
+            Copy-Item `
+                -LiteralPath $existingEnvPath `
+                -Destination $preservedEnvPath `
+                -Force
         }
-    }
-    else {
+
+        Write-Host "Downloading project package from GitHub..." -ForegroundColor Cyan
+        Invoke-DownloadFile `
+            -Uri $RepositoryArchiveUrl `
+            -Destination $archivePath `
+            -MinimumBytes 1024
+
+        New-Item -Path $extractPath -ItemType Directory -Force | Out-Null
+
+        Write-Host "Extracting project package..." -ForegroundColor Cyan
+        Expand-Archive `
+            -LiteralPath $archivePath `
+            -DestinationPath $extractPath `
+            -Force
+
+        $extractedRepository = Join-Path $extractPath $RepositoryArchiveFolder
+
+        if (-not (Test-Path -LiteralPath $extractedRepository -PathType Container)) {
+            throw "The expected project folder was not found in the downloaded ZIP package."
+        }
+
+        foreach ($requiredFile in @(
+            "install-windows.ps1",
+            "compose.yaml",
+            ".env.example"
+        )) {
+            $requiredPath = Join-Path $extractedRepository $requiredFile
+
+            if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
+                throw "The downloaded project package is incomplete. Missing file: $requiredFile"
+            }
+        }
+
         if (Test-Path -LiteralPath $RepositoryPath) {
-            $backupPath = "$RepositoryPath-old-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
-            Write-Host "Incomplete project folder is being preserved as: $backupPath" -ForegroundColor Yellow
-            Move-Item -LiteralPath $RepositoryPath -Destination $backupPath -Force
+            Write-Host "Refreshing local installation files..." -ForegroundColor Cyan
+            Remove-Item -LiteralPath $RepositoryPath -Recurse -Force
         }
 
-        Write-Host "Downloading project from GitHub..." -ForegroundColor Cyan
+        Move-Item `
+            -LiteralPath $extractedRepository `
+            -Destination $RepositoryPath `
+            -Force
 
-        & $gitExecutable clone --branch main --single-branch $RepositoryUrl $RepositoryPath
+        if (Test-Path -LiteralPath $preservedEnvPath -PathType Leaf) {
+            Copy-Item `
+                -LiteralPath $preservedEnvPath `
+                -Destination (Join-Path $RepositoryPath ".env") `
+                -Force
+        }
+
+        $localInstaller = Join-Path $RepositoryPath "install-windows.ps1"
+
+        Write-Host "Starting local installer..." -ForegroundColor Green
+
+        & powershell.exe `
+            -NoProfile `
+            -ExecutionPolicy Bypass `
+            -File $localInstaller
 
         if ($LASTEXITCODE -ne 0) {
-            throw "Repository download failed."
+            throw "USOM IOC Gateway installation failed."
         }
     }
-
-    $localInstaller = Join-Path $RepositoryPath "install-windows.ps1"
-
-    if (-not (Test-Path -LiteralPath $localInstaller -PathType Leaf)) {
-        throw "Local installer was not found: $localInstaller"
-    }
-
-    Write-Host "Starting local installer..." -ForegroundColor Green
-
-    & powershell.exe `
-        -NoProfile `
-        -ExecutionPolicy Bypass `
-        -File $localInstaller
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "USOM IOC Gateway installation failed."
+    finally {
+        Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $preservedEnvPath -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -454,7 +369,10 @@ function Install-DockerDesktopFromOfficialSource {
 
     try {
         Write-Host "Downloading Docker Desktop from Docker's official server..." -ForegroundColor Cyan
-        Invoke-DownloadFile -Uri $downloadUrl -Destination $installerPath
+        Invoke-DownloadFile `
+            -Uri $downloadUrl `
+            -Destination $installerPath `
+            -MinimumBytes 10MB
 
         Write-Host "Installing Docker Desktop with the WSL 2 backend..." -ForegroundColor Cyan
 
