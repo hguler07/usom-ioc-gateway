@@ -1,56 +1,57 @@
-<p align="right">
-  <a href="./README.md"><strong>Türkçe</strong></a>
-  &nbsp;·&nbsp;
-  <a href="./README_EN.md">English</a>
-</p>
+<div align="center">
 
-<h1 align="center">USOM IOC Gateway</h1>
+USOM IOC Gateway
 
-<p align="center">
-  USOM IOC verilerini senkronize eden ve güvenlik ürünleri için kullanıma hazır TXT feed'leri üreten Docker tabanlı IOC Gateway.
-</p>
+USOM IOC verilerini senkronize eden ve güvenlik ürünleri için kullanıma hazır TXT feed'leri yayımlayan Docker tabanlı IOC Gateway.
 
-<p align="center">
+<p>
   <img alt="Docker" src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white">
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Ubuntu%20%7C%20Windows-2F3437">
 </p>
 
-Genel Bakış
+<p>
+  <a href="./README.md">
+    <img alt="Türkçe" src="https://img.shields.io/badge/Dil-T%C3%BCrk%C3%A7e-E30A17">
+  </a>
+  <a href="./README_EN.md">
+    <img alt="English" src="https://img.shields.io/badge/Language-English-1F6FEB">
+  </a>
+</p>
 
-USOM IOC Gateway, USOM tarafından yayımlanan domain, IPv4, IPv6 ve URL tehdit göstergelerini düzenli olarak senkronize eder.
+</div>
 
-Toplanan IOC kayıtları merkezi olarak saklanır, web arayüzü üzerinden yönetilir ve firewall, SIEM, güvenlik ağ geçidi veya benzeri ürünlerin kullanabileceği TXT feed'leri halinde yayımlanır.
+<p align="center">
+  <img src="./docs/images/feed-status.png" alt="USOM IOC Gateway web paneli" width="100%">
+</p>
 
-Öne Çıkanlar
+Nedir?
 
-Otomatik USOM IOC senkronizasyonu
+USOM tarafından yayımlanan domain, IPv4, IPv6 ve URL IOC kayıtlarını düzenli olarak senkronize eder. Verileri web paneli üzerinden yönetir ve firewall, SIEM veya güvenlik ağ geçitlerinin kullanabileceği TXT feed'leri halinde sunar.
 
-Domain, IPv4, IPv6 ve URL için ayrı worker yapısı
+Özellikler
 
-Web tabanlı yönetim paneli
+Domain, IPv4, IPv6 ve URL senkronizasyonu
+
+Ayrı worker servisleriyle paralel işleme
+
+Web tabanlı yönetim ve durum takibi
 
 TXT feed üretimi ve yayını
 
-PostgreSQL tabanlı kalıcı veri saklama
+PostgreSQL üzerinde kalıcı veri saklama
 
-Docker Compose ile hızlı kurulum
+Ubuntu ve Windows için otomatik kurulum
 
-Servis durumu ve senkronizasyon takibi
-
-Hızlı Kurulum
+Kurulum
 
 Ubuntu
 
-Temiz bir Ubuntu sunucuda:
+Temiz bir Ubuntu sunucuda çalıştırın:
 
 curl -fsSL https://raw.githubusercontent.com/hguler07/usom-ioc-gateway/main/bootstrap-ubuntu.sh -o bootstrap-ubuntu.sh
 chmod +x bootstrap-ubuntu.sh
 sudo ./bootstrap-ubuntu.sh
-
-Kurulum tamamlandığında:
-
-http://SUNUCU_IP_ADRESI
 
 Windows 10 / 11
 
@@ -58,146 +59,65 @@ PowerShell'i Yönetici olarak açın ve çalıştırın:
 
 irm "https://raw.githubusercontent.com/hguler07/usom-ioc-gateway/main/install-windows.ps1?v=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())" | iex
 
-Kurulum tamamlandığında:
+Kurulum araçları gerekli bileşenleri kontrol eder. Admin parolası otomatik oluşturulur ve kurulum sonunda gösterilir.
 
-http://localhost:8080
+Erişim
 
-Varsayılan kullanıcı adı admin'dir. Admin parolası kurulum sırasında güvenli şekilde oluşturulur ve işlem sonunda ekranda gösterilir.
+Ortam
 
-Sistem Gereksinimleri
+Yönetim paneli
 
-Kaynak
+Feed dizini
 
-Önerilen
+Ubuntu
 
-CPU
-
-2 vCPU
-
-RAM
-
-4 GB
-
-Disk
-
-40 GB
-
-İnternet erişimi ve Docker çalışma ortamı gereklidir. Windows kurulum aracı gerekli bileşenleri kontrol eder.
-
-Mimari
-
-Servis
-
-Görev
-
-db
-
-PostgreSQL veritabanı
-
-web
-
-Yönetim paneli ve API
-
-orchestrator
-
-Senkronizasyon zamanlayıcısı
-
-worker-domain
-
-Domain IOC işlemleri
-
-worker-ip
-
-IPv4 IOC işlemleri
-
-worker-url
-
-URL IOC işlemleri
-
-worker-ipv6
-
-IPv6 IOC işlemleri
-
-nginx
-
-Web erişimi ve feed yayını
-
-Feed Erişimi
-
-Ubuntu:
+http://SUNUCU_IP_ADRESI
 
 http://SUNUCU_IP_ADRESI/feeds/
 
-Windows:
+Windows
+
+http://localhost:8080
 
 http://localhost:8080/feeds/
 
-Yapılandırma
+Varsayılan kullanıcı adı: admin
 
-Kurulum sırasında .env.example dosyasından yerel bir .env dosyası oluşturulur.
+Sistem Gereksinimleri
 
-Başlıca değişkenler:
+CPU
 
-Değişken
+RAM
 
-Açıklama
+Disk
 
-TFG_HTTP_PORT
+2 vCPU
 
-Web ve feed yayın portu
+4 GB
 
-DJANGO_ALLOWED_HOSTS
+40 GB
 
-İzin verilen adresler
+Temel Komutlar
 
-ORCHESTRATOR_INTERVAL_SECONDS
-
-Senkronizasyon aralığı
-
-USOM_FETCH_CONCURRENCY
-
-Eş zamanlı veri çekme değeri
-
-DJANGO_SUPERUSER_USERNAME
-
-Yönetici kullanıcı adı
-
-.env dosyası parola ve secret bilgileri içerir. GitHub'a yüklenmemelidir.
-
-Temel Yönetim Komutları
-
-Ubuntu proje dizini:
+Proje dizinine geçin:
 
 cd /opt/usom-ioc-gateway
 
-Windows proje dizini:
+Windows:
 
 Set-Location "C:\USOM\usom-ioc-gateway"
 
-Servis durumu:
+Servis durumunu görüntüleyin:
 
 docker compose ps
 
-Son loglar:
-
-docker compose logs --tail=100
-
-Canlı log takibi:
+Canlı logları izleyin:
 
 docker compose logs -f
 
-Güncelleme ve yeniden başlatma:
+İmajları güncelleyip servisleri yeniden başlatın:
 
 docker compose pull
 docker compose up -d --remove-orphans
 
-Ubuntu Kaldırma
-
-cd /opt/usom-ioc-gateway
-sudo ./uninstall.sh
-
-Docker Engine dahil kapsamlı kaldırma:
-
-sudo ./uninstall.sh --purge-docker
-
-Aynı sunucuda başka Docker servisleri çalışıyorsa --purge-docker kullanılmamalıdır.
+.env dosyası parola ve secret bilgileri içerir. GitHub'a yüklenmemelidir.
