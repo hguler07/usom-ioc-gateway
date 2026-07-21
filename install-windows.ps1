@@ -3,8 +3,6 @@
 
 $ErrorActionPreference = "Stop"
 
-$BackendImage = "hguler07/usom-ioc-gateway:backend-latest"
-$NginxImage   = "hguler07/usom-ioc-gateway:nginx-latest"
 $DefaultPort  = "8080"
 
 # When this script is executed directly from GitHub (irm ... | iex),
@@ -248,6 +246,153 @@ function Invoke-DockerCommand {
     }
 }
 
+
+function Wait-PostgresReady {
+    param(
+        [string[]]$ComposeArgs,
+        [int]$TimeoutSeconds = 120
+    )
+
+    Write-Host "Waiting for PostgreSQL to become ready..." -ForegroundColor Cyan
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+
+    do {
+        & docker @($ComposeArgs + @(
+            "exec",
+            "-T",
+            "db",
+            "pg_isready",
+            "-U", "threatfeed",
+            "-d", "threatfeed"
+        )) *> $null
+
+        if ($LASTEXITCODE -eq 0) {
+            return $true
+        }
+
+        Start-Sleep -Seconds 2
+    }
+    while ((Get-Date) -lt $deadline)
+
+    return $false
+}
+
+function Sync-PostgresPassword {
+    param(
+        [string[]]$ComposeArgs,
+        [string]$PostgresUser,
+        [string]$PostgresPassword
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PostgresUser)) {
+        throw "POSTGRES_USER is empty."
+    }
+
+    if ([string]::IsNullOrWhiteSpace($PostgresPassword)) {
+        throw "POSTGRES_PASSWORD is empty."
+    }
+
+    Write-Host "Synchronizing the PostgreSQL application password..." -ForegroundColor Cyan
+
+    # The official PostgreSQL image permits local socket administration from
+    # inside the container. Use the container's own environment variables so
+    # the password is not exposed on the PowerShell command line.
+    $syncCommand = @'
+psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -v new_password="$POSTGRES_PASSWORD" -c "ALTER ROLE \"$POSTGRES_USER\" WITH PASSWORD :'new_password';"
+'@
+
+    & docker @($ComposeArgs + @(
+        "exec",
+        "-T",
+        "db",
+        "sh",
+        "-c",
+        $syncCommand
+    )) *> $null
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "PostgreSQL password synchronization failed."
+    }
+
+    # Validate the same TCP/password authentication path used by Django.
+    $validationCommand = @'
+PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -tAc "SELECT 1" >/dev/null
+'@
+
+    & docker @($ComposeArgs + @(
+        "exec",
+        "-T",
+        "db",
+        "sh",
+        "-c",
+        $validationCommand
+    )) *> $null
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "PostgreSQL password validation failed after synchronization."
+    }
+}
+
+function Wait-ApplicationReady {
+    param(
+        [string]$Url,
+        [int]$TimeoutSeconds = 240
+    )
+
+    Write-Host "Waiting for the web application to become ready..." -ForegroundColor Cyan
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+
+    do {
+        try {
+            $response = Invoke-WebRequest `
+                -Uri $Url `
+                -UseBasicParsing `
+                -TimeoutSec 5 `
+                -ErrorAction Stop
+
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) {
+                return $true
+            }
+        }
+        catch {
+            # The service may still be running migrations or starting Gunicorn.
+        }
+
+        Start-Sleep -Seconds 3
+    }
+    while ((Get-Date) -lt $deadline)
+
+    return $false
+}
+
+function Show-StartupDiagnostics {
+    param(
+        [string[]]$ComposeArgs
+    )
+
+    if ($null -eq $ComposeArgs -or $ComposeArgs.Count -eq 0) {
+        return
+    }
+
+    Write-Host ""
+    Write-Host "Container status:" -ForegroundColor Yellow
+    & docker @($ComposeArgs + @("ps", "-a"))
+
+    Write-Host ""
+    Write-Host "Startup logs:" -ForegroundColor Yellow
+    & docker @($ComposeArgs + @(
+        "logs",
+        "--tail=150",
+        "db",
+        "feeds-init",
+        "web",
+        "nginx"
+    ))
+}
+
+$ComposeArgs = $null
+
 try {
     Write-Host ""
     Write-Host "USOM IOC Gateway Windows installer starting..." -ForegroundColor Cyan
@@ -321,25 +466,12 @@ try {
     $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     [System.IO.File]::WriteAllText($EnvPath, $EnvContent, $Utf8NoBom)
 
-    $ComposeContent = [System.IO.File]::ReadAllText($ComposePath, [System.Text.Encoding]::UTF8)
-
-    $ComposeContent = [Regex]::Replace(
-        $ComposeContent,
-        "(?m)^([ \t]*image:[ \t]*)hguler07/usom-ioc-gateway:backend[^ \t`r`n#]*",
-        "`${1}$BackendImage"
-    )
-
-    $ComposeContent = [Regex]::Replace(
-        $ComposeContent,
-        "(?m)^([ \t]*image:[ \t]*)hguler07/usom-ioc-gateway:nginx[^ \t`r`n#]*",
-        "`${1}$NginxImage"
-    )
-
-    [System.IO.File]::WriteAllText($ComposePath, $ComposeContent, $Utf8NoBom)
 
     $AdminUser = Get-DotEnvValue -Content $EnvContent -Name "DJANGO_SUPERUSER_USERNAME" -DefaultValue "admin"
     $AdminPassword = Get-DotEnvValue -Content $EnvContent -Name "DJANGO_SUPERUSER_PASSWORD" -DefaultValue ""
     $HttpPort = Get-DotEnvValue -Content $EnvContent -Name "TFG_HTTP_PORT" -DefaultValue $DefaultPort
+    $PostgresUser = Get-DotEnvValue -Content $EnvContent -Name "POSTGRES_USER" -DefaultValue "threatfeed"
+    $PostgresPassword = Get-DotEnvValue -Content $EnvContent -Name "POSTGRES_PASSWORD" -DefaultValue ""
 
     $ComposeArgs = @(
         "compose",
@@ -355,8 +487,29 @@ try {
     Write-Host "Pulling Docker images..." -ForegroundColor Cyan
     Invoke-DockerCommand -DockerArgs ($ComposeArgs + @("pull"))
 
-    Write-Host "Starting services..." -ForegroundColor Cyan
+    # Start PostgreSQL first. If an old Docker volume survived while .env was
+    # recreated, align the database role password with the current .env without
+    # deleting the database.
+    Write-Host "Starting PostgreSQL..." -ForegroundColor Cyan
+    Invoke-DockerCommand -DockerArgs ($ComposeArgs + @("up", "-d", "db", "feeds-init"))
+
+    if (-not (Wait-PostgresReady -ComposeArgs $ComposeArgs -TimeoutSeconds 120)) {
+        throw "PostgreSQL did not become ready within 120 seconds."
+    }
+
+    Sync-PostgresPassword `
+        -ComposeArgs $ComposeArgs `
+        -PostgresUser $PostgresUser `
+        -PostgresPassword $PostgresPassword
+
+    Write-Host "Starting application services..." -ForegroundColor Cyan
     Invoke-DockerCommand -DockerArgs ($ComposeArgs + @("up", "-d", "--remove-orphans"))
+
+    $ApplicationUrl = "http://localhost:$HttpPort"
+
+    if (-not (Wait-ApplicationReady -Url $ApplicationUrl -TimeoutSeconds 240)) {
+        throw "The web application did not become ready within 240 seconds."
+    }
 
     Write-Host ""
     Write-Host "Container status:" -ForegroundColor Cyan
@@ -364,11 +517,9 @@ try {
 
     Write-Host ""
     Write-Host "Installation completed successfully." -ForegroundColor Green
-    Write-Host "URL           : http://localhost:$HttpPort"
+    Write-Host "URL           : $ApplicationUrl"
     Write-Host "Username      : $AdminUser"
     Write-Host "Admin password: $AdminPassword" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "If you see 502 on first startup, wait 1-2 minutes and refresh the page."
     Write-Host ""
 
     exit 0
@@ -377,7 +528,11 @@ catch {
     Write-Host ""
     Write-Host "INSTALLATION FAILED" -ForegroundColor Red
     Write-Host $_.Exception.Message -ForegroundColor Red
-    Write-Host ""
 
+    if ($null -ne $ComposeArgs) {
+        Show-StartupDiagnostics -ComposeArgs $ComposeArgs
+    }
+
+    Write-Host ""
     exit 1
 }
