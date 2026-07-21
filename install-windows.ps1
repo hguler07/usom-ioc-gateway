@@ -281,11 +281,16 @@ function Sync-PostgresPassword {
     param(
         [string[]]$ComposeArgs,
         [string]$PostgresUser,
+        [string]$PostgresDatabase,
         [string]$PostgresPassword
     )
 
     if ([string]::IsNullOrWhiteSpace($PostgresUser)) {
         throw "POSTGRES_USER is empty."
+    }
+
+    if ([string]::IsNullOrWhiteSpace($PostgresDatabase)) {
+        throw "POSTGRES_DB is empty."
     }
 
     if ([string]::IsNullOrWhiteSpace($PostgresPassword)) {
@@ -294,43 +299,46 @@ function Sync-PostgresPassword {
 
     Write-Host "Synchronizing the PostgreSQL application password..." -ForegroundColor Cyan
 
-    # The official PostgreSQL image permits local socket administration from
-    # inside the container. Use the container's own environment variables so
-    # the password is not exposed on the PowerShell command line.
-    $syncCommand = @'
-psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -v new_password="$POSTGRES_PASSWORD" -c "ALTER ROLE \"$POSTGRES_USER\" WITH PASSWORD :'new_password';"
-'@
+    # Send SQL directly to psql through standard input. This avoids the nested
+    # PowerShell -> Docker -> sh -> psql quoting problem.
+    $SafeRoleName = $PostgresUser.Replace('"', '""')
+    $SafePassword = $PostgresPassword.Replace("'", "''")
+    $SqlStatement = "ALTER ROLE `"$SafeRoleName`" WITH PASSWORD '$SafePassword';"
 
-    & docker @($ComposeArgs + @(
+    $SqlStatement | & docker @($ComposeArgs + @(
         "exec",
         "-T",
         "db",
-        "sh",
-        "-c",
-        $syncCommand
+        "psql",
+        "-U", $PostgresUser,
+        "-d", $PostgresDatabase,
+        "-v", "ON_ERROR_STOP=1"
     )) *> $null
 
     if ($LASTEXITCODE -ne 0) {
         throw "PostgreSQL password synchronization failed."
     }
 
-    # Validate the same TCP/password authentication path used by Django.
-    $validationCommand = @'
-PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -tAc "SELECT 1" >/dev/null
-'@
-
+    # Validate the same TCP/password authentication method used by Django.
     & docker @($ComposeArgs + @(
         "exec",
         "-T",
         "db",
-        "sh",
-        "-c",
-        $validationCommand
+        "env",
+        "PGPASSWORD=$PostgresPassword",
+        "psql",
+        "-h", "127.0.0.1",
+        "-U", $PostgresUser,
+        "-d", $PostgresDatabase,
+        "-v", "ON_ERROR_STOP=1",
+        "-tAc", "SELECT 1"
     )) *> $null
 
     if ($LASTEXITCODE -ne 0) {
         throw "PostgreSQL password validation failed after synchronization."
     }
+
+    Write-Host "PostgreSQL password synchronized successfully." -ForegroundColor Green
 }
 
 function Wait-ApplicationReady {
@@ -471,6 +479,7 @@ try {
     $AdminPassword = Get-DotEnvValue -Content $EnvContent -Name "DJANGO_SUPERUSER_PASSWORD" -DefaultValue ""
     $HttpPort = Get-DotEnvValue -Content $EnvContent -Name "TFG_HTTP_PORT" -DefaultValue $DefaultPort
     $PostgresUser = Get-DotEnvValue -Content $EnvContent -Name "POSTGRES_USER" -DefaultValue "threatfeed"
+    $PostgresDatabase = Get-DotEnvValue -Content $EnvContent -Name "POSTGRES_DB" -DefaultValue "threatfeed"
     $PostgresPassword = Get-DotEnvValue -Content $EnvContent -Name "POSTGRES_PASSWORD" -DefaultValue ""
 
     $ComposeArgs = @(
@@ -500,6 +509,7 @@ try {
     Sync-PostgresPassword `
         -ComposeArgs $ComposeArgs `
         -PostgresUser $PostgresUser `
+        -PostgresDatabase $PostgresDatabase `
         -PostgresPassword $PostgresPassword
 
     Write-Host "Starting application services..." -ForegroundColor Cyan
