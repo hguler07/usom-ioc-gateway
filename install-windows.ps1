@@ -20,6 +20,15 @@ $RepositoryPath = Join-Path $InstallRoot "usom-ioc-gateway"
 $RepositoryArchiveUrl = "https://github.com/hguler07/usom-ioc-gateway/archive/refs/heads/main.zip"
 $RepositoryArchiveFolder = "usom-ioc-gateway-main"
 $CurrentScriptPath = $MyInvocation.MyCommand.Path
+
+# Some Windows profiles contain a stale or invalid 8.3 TEMP path
+# (for example C:\Users\XXXXXX~1.XXX). Use a predictable installer-owned
+# temporary directory so ZIP extraction and prerequisite installers do not
+# depend on the user's TEMP/TMP configuration.
+$InstallerTempRoot = Join-Path $InstallRoot ".installer-temp"
+New-Item -Path $InstallerTempRoot -ItemType Directory -Force | Out-Null
+$env:TEMP = $InstallerTempRoot
+$env:TMP = $InstallerTempRoot
 $RunningFromLocalFile = `
     -not [string]::IsNullOrWhiteSpace($CurrentScriptPath) -and `
     (Test-Path -LiteralPath $CurrentScriptPath -PathType Leaf)
@@ -67,9 +76,9 @@ function Start-RepositoryBootstrap {
     New-Item -Path $InstallRoot -ItemType Directory -Force | Out-Null
 
     $operationId = [Guid]::NewGuid().ToString("N")
-    $archivePath = Join-Path $env:TEMP "usom-ioc-gateway-$operationId.zip"
-    $extractPath = Join-Path $env:TEMP "usom-ioc-gateway-$operationId"
-    $preservedEnvPath = Join-Path $env:TEMP "usom-ioc-gateway-$operationId.env"
+    $archivePath = Join-Path $InstallerTempRoot "usom-ioc-gateway-$operationId.zip"
+    $extractPath = Join-Path $InstallerTempRoot "usom-ioc-gateway-$operationId"
+    $preservedEnvPath = Join-Path $InstallerTempRoot "usom-ioc-gateway-$operationId.env"
     $existingEnvPath = Join-Path $RepositoryPath ".env"
 
     try {
@@ -148,6 +157,14 @@ function Start-RepositoryBootstrap {
         Remove-Item -LiteralPath $archivePath -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $extractPath -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $preservedEnvPath -Force -ErrorAction SilentlyContinue
+
+        if (Test-Path -LiteralPath $InstallerTempRoot -PathType Container) {
+            $remainingItems = @(Get-ChildItem -LiteralPath $InstallerTempRoot -Force -ErrorAction SilentlyContinue)
+
+            if ($remainingItems.Count -eq 0) {
+                Remove-Item -LiteralPath $InstallerTempRoot -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
 }
 
@@ -364,7 +381,7 @@ function Ensure-WslForDocker {
 }
 
 function Install-DockerDesktopFromOfficialSource {
-    $installerPath = Join-Path $env:TEMP "Docker-Desktop-Installer.exe"
+    $installerPath = Join-Path $InstallerTempRoot "Docker-Desktop-Installer.exe"
     $downloadUrl = "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
 
     try {
