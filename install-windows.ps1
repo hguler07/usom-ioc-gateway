@@ -550,8 +550,33 @@ function Test-DockerObjectExists {
         [string]$Name
     )
 
-    & docker $ObjectType inspect $Name *> $null
-    return ($LASTEXITCODE -eq 0)
+    # A missing Docker object is a normal result during a clean installation.
+    # List existing names instead of calling `docker ... inspect` for an object
+    # that may not exist. This avoids PowerShell converting Docker's native
+    # "no such volume/network" stderr response into a terminating error.
+    try {
+        $existingNames = switch ($ObjectType) {
+            "volume" {
+                @(& docker volume ls --format '{{.Name}}' 2>$null)
+            }
+            "network" {
+                @(& docker network ls --format '{{.Name}}' 2>$null)
+            }
+        }
+
+        foreach ($existingName in @($existingNames)) {
+            if (-not [string]::IsNullOrWhiteSpace("$existingName") -and
+                "$existingName".Trim() -eq $Name) {
+                return $true
+            }
+        }
+    }
+    catch {
+        # The main prerequisite check already verified Docker readiness. A
+        # lookup failure here is treated as "object not present".
+    }
+
+    return $false
 }
 
 function Test-ExistingInstallation {
@@ -563,9 +588,16 @@ function Test-ExistingInstallation {
         return $true
     }
 
-    $containerIds = @(
-        & docker ps -aq --filter "label=com.docker.compose.project=usom-ioc-gateway" 2>$null
-    )
+    $containerIds = @()
+
+    try {
+        $containerIds = @(
+            & docker ps -aq --filter "label=com.docker.compose.project=usom-ioc-gateway" 2>$null
+        )
+    }
+    catch {
+        $containerIds = @()
+    }
 
     if ($containerIds.Count -gt 0) {
         return $true
@@ -613,9 +645,16 @@ function Remove-ExistingInstallation {
 
     Write-Host "Eski USOM IOC Gateway Docker kaynakları temizleniyor..." -ForegroundColor Cyan
 
-    $containerIds = @(
-        & docker ps -aq --filter "label=com.docker.compose.project=usom-ioc-gateway" 2>$null
-    )
+    $containerIds = @()
+
+    try {
+        $containerIds = @(
+            & docker ps -aq --filter "label=com.docker.compose.project=usom-ioc-gateway" 2>$null
+        )
+    }
+    catch {
+        $containerIds = @()
+    }
 
     if ($containerIds.Count -gt 0) {
         & docker rm -f @containerIds *> $null
