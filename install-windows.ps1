@@ -3,28 +3,32 @@
 
 $ErrorActionPreference = "Stop"
 
-# Windows PowerShell 5.1 may use the legacy console code page by default.
-# Force UTF-8 so Turkish characters are displayed and read correctly.
-try {
-    $Utf8ConsoleEncoding = New-Object System.Text.UTF8Encoding($false)
-    [Console]::InputEncoding = $Utf8ConsoleEncoding
-    [Console]::OutputEncoding = $Utf8ConsoleEncoding
-    $global:OutputEncoding = $Utf8ConsoleEncoding
-
-    if ($Host.Name -eq "ConsoleHost") {
-        & "$env:SystemRoot\System32\chcp.com" 65001 *> $null
-    }
-}
-catch {
-    # Encoding configuration is best effort on hosts without a standard console.
-}
-
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 }
 catch {
     # TLS configuration is best effort on newer PowerShell versions.
 }
+
+function ConvertFrom-Utf8Base64 {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Value
+    )
+
+    return [System.Text.Encoding]::UTF8.GetString(
+        [System.Convert]::FromBase64String($Value)
+    )
+}
+
+# Keep the PowerShell source ASCII-only for Windows PowerShell 5.1.
+# Turkish messages are decoded to Unicode only at runtime.
+$TextExistingInstall = ConvertFrom-Utf8Base64 "RXNraSBiaXIgVVNPTSBJT0MgR2F0ZXdheSBrdXJ1bHVtdSB2ZXlhIERvY2tlciBrYWzEsW50xLFsYXLEsSBidWx1bmR1Lg=="
+$TextCleanWarning = ConvertFrom-Utf8Base64 "VGVtaXoga3VydWx1bTsgZXNraSB2ZXJpdGFiYW7EsW7EsSwgZmVlZGxlcmksIGNvbnRhaW5lcmxhcsSxLCBhxJ/EsSB2ZSDDvHJldGlsZW4gxZ9pZnJlbGVyaSBzaWxlci4="
+$TextCleanPrompt = ConvertFrom-Utf8Base64 "VGVtaXoga3VydWx1bSB5YXDEsWxzxLFuIG3EsT8gW0UvSF0="
+$TextCleanAnswer = ConvertFrom-Utf8Base64 "RXZldCBpw6dpbiBFLCBIYXnEsXIgacOnaW4gSCBnaXJpbi4="
+$TextCleaning = ConvertFrom-Utf8Base64 "RXNraSBVU09NIElPQyBHYXRld2F5IERvY2tlciBrYXluYWtsYXLEsSB0ZW1pemxlbml5b3IuLi4="
+$TextCleanComplete = ConvertFrom-Utf8Base64 "RXNraSBrdXJ1bHVtIHZlcmlsZXJpIHNpbGluZGkuIFRlbWl6IGt1cnVsdW0gb2x1xZ90dXJ1bGFjYWsu"
 
 $DefaultPort  = "8080"
 
@@ -650,11 +654,11 @@ function Test-ExistingInstallation {
 
 function Read-CleanInstallChoice {
     Write-Host ""
-    Write-Host "Eski bir USOM IOC Gateway kurulumu veya Docker kalıntıları bulundu." -ForegroundColor Yellow
-    Write-Host "Temiz kurulum; eski veritabanını, feedleri, containerları, ağı ve üretilen şifreleri siler." -ForegroundColor Yellow
+    Write-Host $TextExistingInstall -ForegroundColor Yellow
+    Write-Host $TextCleanWarning -ForegroundColor Yellow
 
     while ($true) {
-        $answer = (Read-Host "Temiz kurulum yapılsın mı? [E/H]").Trim().ToUpperInvariant()
+        $answer = (Read-Host $TextCleanPrompt).Trim().ToUpperInvariant()
 
         switch ($answer) {
             "E" { return $true }
@@ -662,7 +666,7 @@ function Read-CleanInstallChoice {
             "H" { return $false }
             "N" { return $false }
             default {
-                Write-Host "Evet için E, Hayır için H girin." -ForegroundColor Yellow
+                Write-Host $TextCleanAnswer -ForegroundColor Yellow
             }
         }
     }
@@ -673,7 +677,7 @@ function Remove-ExistingInstallation {
         [string]$EnvPath
     )
 
-    Write-Host "Eski USOM IOC Gateway Docker kaynakları temizleniyor..." -ForegroundColor Cyan
+    Write-Host $TextCleaning -ForegroundColor Cyan
 
     $containerIds = @()
 
@@ -717,7 +721,7 @@ function Remove-ExistingInstallation {
 
     Remove-Item -LiteralPath $EnvPath -Force -ErrorAction SilentlyContinue
 
-    Write-Host "Eski kurulum verileri silindi. Temiz kurulum oluşturulacak." -ForegroundColor Green
+    Write-Host $TextCleanComplete -ForegroundColor Green
 }
 
 function Wait-PostgresReady {
