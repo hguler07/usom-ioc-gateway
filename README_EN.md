@@ -22,7 +22,7 @@
 </div>
 
 <p align="center">
-  <img src="./docs/images/feed-status.png" alt="USOM IOC Gateway web interface" width="100%">
+  <img src=".usom-ioc-gateway-dashboard.png" alt="USOM IOC Gateway web interface" width="100%">
 </p>
 
 ## What is it?
