@@ -103,11 +103,11 @@ Kurulum aracı gerekli bileşenleri kontrol eder. Yönetici parolası otomatik o
   <img alt="RAM" src="https://img.shields.io/badge/RAM-4%20GB-0D1117?style=flat-square&labelColor=0D1117">
   <img alt="Disk" src="https://img.shields.io/badge/Disk-40%20GB-0D1117?style=flat-square&labelColor=0D1117">
 </p>
-
-> Kurulum sırasında oluşturulan `.env` dosyası parola ve secret bilgileri içerir. GitHub'a yüklenmemelidir.
-
 ---
 
 <p align="center">
-  <sub>USOM IOC verilerini güvenlik ürünlerine daha sade, düzenli ve yönetilebilir biçimde ulaştırmak için geliştirilmiştir.</sub>
+  <sub>
+    Hüseyin Güler tarafından geliştirilmiştir · © 2026<br>
+    Kurumların kendi altyapılarında çalıştırabilmesi için hazırlanmış ve kullanıma sunulmuştur.
+  </sub>
 </p>
