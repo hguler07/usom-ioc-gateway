@@ -100,7 +100,7 @@ Kurulum aracı gerekli bileşenleri kontrol eder. Yönetici parolası otomatik o
 </table>
 
 <p align="center">
-  > **Not:** Varsayılan yönetici kullanıcısı <code>`admin`</code> olarak oluşturulur. Yönetici şifresi kurulum sırasında otomatik üretilir ve kurulum tamamlandığında terminal ekranında görüntülenir.
+  **Not:** Varsayılan yönetici kullanıcısı <code>admin</code> olarak oluşturulur. Yönetici şifresi kurulum sırasında otomatik üretilir ve kurulum tamamlandığında terminal ekranında görüntülenir.
 </p>
 
 <h2 align="center">Minimum Sistem Gereksinimleri</h2>
