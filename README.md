@@ -103,7 +103,6 @@ Kurulum aracı gerekli bileşenleri kontrol eder. Yönetici parolası otomatik o
   <img alt="RAM" src="https://img.shields.io/badge/RAM-4%20GB-0D1117?style=flat-square&labelColor=0D1117">
   <img alt="Disk" src="https://img.shields.io/badge/Disk-40%20GB-0D1117?style=flat-square&labelColor=0D1117">
 </p>
----
 
 <p align="center">
   <sub>
