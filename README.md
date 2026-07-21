@@ -126,7 +126,8 @@ Gereksinimler:
 
 PowerShell’i Yönetici olarak açıp aşağıdaki komutları çalıştırabilirsiniz:
 
-```irm "https://raw.githubusercontent.com/hguler07/usom-ioc-gateway/main/install-windows.ps1?v=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())" | iex
+```
+irm "https://raw.githubusercontent.com/hguler07/usom-ioc-gateway/main/install-windows.ps1?v=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())" | iex
 ```
 
 Varsayılan erişim adresi:
