@@ -38,12 +38,19 @@ SIEM platforms, and security gateways.
 <h2 align="center">Key Features</h2>
 
 <p align="center">
-  • Periodically synchronizes domain, IPv4, IPv6, and URL IOC records.<br>
-  • Processes each data type independently through dedicated worker services.<br>
-  • Presents IOC search, change history, and synchronization status in one interface.<br>
-  • Generates clean TXT feeds that security products can consume directly.<br>
-  • Stores data centrally and persistently in PostgreSQL.<br>
-  • Provides fast deployment on Linux and Windows with Docker Compose.
+- Synchronizes Domain, IPv4, IPv6, IPv6 Network and URL IOC records from the USOM API.<br>
+- Processes each IOC type through separate worker services for controlled and parallel synchronization.<br>
+- Provides IOC search, system health, synchronization status and change history in a single web panel.<br>
+- Tracks whether organization-owned domains and IP addresses appear in IOC lists through the Protected Assets feature.<br>
+- Generates clean TXT feed files that can be consumed directly by security products.<br>
+- Splits large feed lists into manageable parts.<br>
+- Stores IOC data persistently in PostgreSQL.<br>
+- Tracks added, removed, updated and reactivated IOC records.<br>
+- Includes protection parameters such as retry, backoff, empty page handling and consistency checks for synchronization failures.<br>
+- Improves container image security through updated base images and remediation of vulnerabilities detected by Docker Hub.<br>
+- Provides fast deployment on Linux and Windows environments with Docker Compose.<br>
+- Supports both Turkish and English user interfaces.<br>
+- Supports light and dark themes to match different usage preferences.
 </p>
 
 <h2 align="center">Installation</h2>
