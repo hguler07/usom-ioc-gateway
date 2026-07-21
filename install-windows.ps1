@@ -341,6 +341,62 @@ function Sync-PostgresPassword {
     Write-Host "PostgreSQL password synchronized successfully." -ForegroundColor Green
 }
 
+function Sync-DjangoAdmin {
+    param(
+        [string[]]$ComposeArgs
+    )
+
+    Write-Host "Synchronizing the Django administrator credentials..." -ForegroundColor Cyan
+
+    # Pass the Python code as one direct process argument. No shell is involved,
+    # so PowerShell/Linux quoting cannot truncate the command.
+    $PythonCode = @'
+import os
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+username = os.environ.get("DJANGO_SUPERUSER_USERNAME", "admin")
+password = os.environ.get("DJANGO_SUPERUSER_PASSWORD", "")
+email = os.environ.get("DJANGO_SUPERUSER_EMAIL", "")
+
+if not password:
+    raise RuntimeError("DJANGO_SUPERUSER_PASSWORD is empty")
+
+user, created = User.objects.get_or_create(
+    username=username,
+    defaults={"email": email},
+)
+
+if email:
+    user.email = email
+
+user.is_active = True
+user.is_staff = True
+user.is_superuser = True
+user.set_password(password)
+user.save()
+
+print("Administrator credentials synchronized.")
+'@
+
+    & docker @($ComposeArgs + @(
+        "exec",
+        "-T",
+        "web",
+        "python",
+        "manage.py",
+        "shell",
+        "-c",
+        $PythonCode
+    )) *> $null
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Django administrator credential synchronization failed."
+    }
+
+    Write-Host "Administrator credentials synchronized successfully." -ForegroundColor Green
+}
+
 function Wait-ApplicationReady {
     param(
         [string]$Url,
@@ -491,7 +547,11 @@ try {
     )
 
     Write-Host "Checking Docker Compose config..." -ForegroundColor Cyan
-    Invoke-DockerCommand -DockerArgs ($ComposeArgs + @("config"))
+    & docker @($ComposeArgs + @("config", "--quiet")) *> $null
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Docker Compose configuration is invalid."
+    }
 
     Write-Host "Pulling Docker images..." -ForegroundColor Cyan
     Invoke-DockerCommand -DockerArgs ($ComposeArgs + @("pull"))
@@ -520,6 +580,11 @@ try {
     if (-not (Wait-ApplicationReady -Url $ApplicationUrl -TimeoutSeconds 240)) {
         throw "The web application did not become ready within 240 seconds."
     }
+
+    # Keep the administrator account in the database aligned with the password
+    # displayed by this installer. This also repairs installations that reused
+    # an older PostgreSQL volume with a previously created admin account.
+    Sync-DjangoAdmin -ComposeArgs $ComposeArgs
 
     Write-Host ""
     Write-Host "Container status:" -ForegroundColor Cyan
