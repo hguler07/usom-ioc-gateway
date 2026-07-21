@@ -348,10 +348,16 @@ function Sync-DjangoAdmin {
 
     Write-Host "Synchronizing the Django administrator credentials..." -ForegroundColor Cyan
 
-    # Pass the Python code as one direct process argument. No shell is involved,
-    # so PowerShell/Linux quoting cannot truncate the command.
+    # Run a standalone Python script through standard input. This does not rely
+    # on manage.py shell supporting the -c/--command option.
     $PythonCode = @'
 import os
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "threatfeed.settings")
+
+import django
+django.setup()
+
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -362,7 +368,7 @@ email = os.environ.get("DJANGO_SUPERUSER_EMAIL", "")
 if not password:
     raise RuntimeError("DJANGO_SUPERUSER_PASSWORD is empty")
 
-user, created = User.objects.get_or_create(
+user, _ = User.objects.get_or_create(
     username=username,
     defaults={"email": email},
 )
@@ -376,18 +382,18 @@ user.is_superuser = True
 user.set_password(password)
 user.save()
 
+if not user.check_password(password):
+    raise RuntimeError("Administrator password verification failed")
+
 print("Administrator credentials synchronized.")
 '@
 
-    & docker @($ComposeArgs + @(
+    $PythonCode | & docker @($ComposeArgs + @(
         "exec",
         "-T",
         "web",
         "python",
-        "manage.py",
-        "shell",
-        "-c",
-        $PythonCode
+        "-"
     )) *> $null
 
     if ($LASTEXITCODE -ne 0) {
