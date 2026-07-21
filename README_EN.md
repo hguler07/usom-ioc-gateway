@@ -100,7 +100,7 @@ The installer checks the required components. An administrator password is gener
 </table>
 
 <p align="center">
-  Default username: <code>admin</code>
+  **Note:** The default administrator user is created as <code>admin</code>. The administrator password is automatically generated during installation and displayed in the terminal when the installation is completed.
 </p>
 
 <h2 align="center">Minimum System Requirements</h2>
