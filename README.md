@@ -38,12 +38,19 @@ kullanabileceği TXT feed'leri halinde sunar.
 <h2 align="center">Öne Çıkan Özellikler</h2>
 
 <p align="center">
-  • Domain, IPv4, IPv6 ve URL IOC kayıtlarını düzenli olarak senkronize eder.<br>
-  • Her veri türünü ayrı worker servisleriyle bağımsız ve paralel olarak işler.<br>
-  • IOC arama, değişiklik geçmişi ve senkronizasyon durumunu tek panelde gösterir.<br>
-  • Güvenlik ürünlerinin doğrudan kullanabileceği sade TXT feed'leri üretir.<br>
-  • Verileri PostgreSQL üzerinde kalıcı ve merkezi olarak saklar.<br>
-  • Docker Compose yapısıyla Linux ve Windows ortamlarında hızlı kurulum sağlar.
+- USOM API üzerinden Domain, IPv4, IPv6, IPv6 Network ve URL IOC kayıtlarını senkronize eder.
+- Her IOC türünü ayrı worker servisleriyle paralel ve kontrollü şekilde işler.
+- IOC arama, sistem sağlığı, senkronizasyon durumu ve değişiklik geçmişini tek panelde gösterir.
+- Korunan Varlıklar özelliğiyle kuruma ait domain ve IP adreslerinin IOC listelerinde yer alıp almadığını takip eder.
+- Güvenlik ürünlerinin doğrudan kullanabileceği sade TXT feed dosyaları üretir.
+- Büyük feed listelerini yönetilebilir parçalara böler.
+- Verileri PostgreSQL üzerinde kalıcı olarak saklar.
+- Eklenen, silinen, güncellenen ve yeniden eklenen IOC kayıtlarını takip eder.
+- Senkronizasyon hatalarına karşı retry, backoff, boş sayfa kontrolü ve tutarlılık kontrolü gibi koruma parametreleri içerir.
+- Container image güvenliği için güncel base image kullanımı ve Docker Hub tarafından tespit edilen zafiyetlere yönelik iyileştirmeler yapılmıştır.
+- Docker Compose ile Linux ve Windows ortamlarında hızlı kurulum sağlar.
+- Türkçe ve İngilizce arayüz desteği sunar.
+- Açık ve koyu tema desteğiyle farklı kullanım tercihlerine uyum sağlar.
 </p>
 
 <h2 align="center">Kurulum</h2>
