@@ -5,18 +5,36 @@
 **USOM IOC verilerini senkronize eden ve güvenlik ürünleri için kullanıma hazır TXT feed'leri yayımlayan Docker tabanlı IOC Gateway.**
 
 <p>
-  <img alt="Docker" src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white">
-  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white">
-  <img alt="Ubuntu" src="https://img.shields.io/badge/Ubuntu-Supported-E95420?logo=ubuntu&logoColor=white">
-  <img alt="Windows" src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows11&logoColor=white">
+  <img
+    alt="Docker"
+    src="https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white"
+  >
+  <img
+    alt="PostgreSQL"
+    src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white"
+  >
+  <img
+    alt="Linux"
+    src="https://img.shields.io/badge/Linux-Supported-3C3C3D?style=flat-square&logo=linux&logoColor=FCC624"
+  >
+  <img
+    alt="Windows"
+    src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square&logo=windows11&logoColor=white"
+  >
 </p>
 
 <p>
   <a href="./README.md">
-    <img alt="Türkçe" src="https://img.shields.io/badge/Language-T%C3%BCrk%C3%A7e-F46E5">
+    <img
+      alt="Türkçe"
+      src="https://img.shields.io/badge/T%C3%BCrk%C3%A7e-475569?style=flat-square"
+    >
   </a>
   <a href="./README_EN.md">
-    <img alt="English" src="https://img.shields.io/badge/Language-English-3B82F6">
+    <img
+      alt="English"
+      src="https://img.shields.io/badge/English-475569?style=flat-square"
+    >
   </a>
 </p>
 
