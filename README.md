@@ -1,239 +1,203 @@
-# USOM IOC Gateway
+<p align="right">
+  <a href="./README.md"><strong>Türkçe</strong></a>
+  &nbsp;·&nbsp;
+  <a href="./README_EN.md">English</a>
+</p>
+
+<h1 align="center">USOM IOC Gateway</h1>
 
 <p align="center">
-  <b>USOM IOC verilerini senkronize ederek güvenlik ürünleri için TXT formatında feed oluşturan Docker tabanlı IOC Gateway.</b>
+  USOM IOC verilerini senkronize eden ve güvenlik ürünleri için kullanıma hazır TXT feed'leri üreten Docker tabanlı IOC Gateway.
 </p>
 
 <p align="center">
-  <img alt="Docker" src="https://img.shields.io/badge/Docker-ready-blue">
-  <img alt="Platform" src="https://img.shields.io/badge/Platform-Ubuntu%20%7C%20Windows%20%7C%20macOS-lightgrey">
-  <img alt="Database" src="https://img.shields.io/badge/Database-PostgreSQL-blue">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white">
+  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white">
+  <img alt="Platform" src="https://img.shields.io/badge/Platform-Ubuntu%20%7C%20Windows-2F3437">
 </p>
 
----
+Genel Bakış
 
-## Genel Bakış
+USOM IOC Gateway, USOM tarafından yayımlanan domain, IPv4, IPv6 ve URL tehdit göstergelerini düzenli olarak senkronize eder.
 
-**USOM IOC Gateway**, USOM tarafından yayınlanan tehdit göstergelerini düzenli olarak senkronize eden ve bu verileri güvenlik ürünlerinin kullanabileceği sade TXT feed formatında yayınlayan bir Docker Compose kurulumudur.
+Toplanan IOC kayıtları merkezi olarak saklanır, web arayüzü üzerinden yönetilir ve firewall, SIEM, güvenlik ağ geçidi veya benzeri ürünlerin kullanabileceği TXT feed'leri halinde yayımlanır.
 
-Amaç; domain, IP, IPv6 ve URL IOC kayıtlarını merkezi olarak takip etmek ve firewall, güvenlik ağ geçidi, SIEM veya benzeri sistemlere kolayca aktarılabilecek feed çıktıları üretmektir.
+Öne Çıkanlar
 
----
+Otomatik USOM IOC senkronizasyonu
 
-## Özellikler
+Domain, IPv4, IPv6 ve URL için ayrı worker yapısı
 
-* USOM IOC verilerini otomatik senkronize eder
-* Domain, IPv4, IPv6 ve URL kayıtlarını ayrı ayrı işler
-* TXT formatında feed çıktısı üretir
-* Web tabanlı yönetim arayüzü sunar
-* PostgreSQL veritabanı kullanır
-* Docker Compose ile kolay kurulum sağlar
-* Worker tabanlı arka plan işlem yapısı kullanır
-* Temel sistem durumu ve servis kontrolü sağlar
+Web tabanlı yönetim paneli
 
----
+TXT feed üretimi ve yayını
 
-## Mimari
+PostgreSQL tabanlı kalıcı veri saklama
 
-Kurulum aşağıdaki servislerden oluşur:
+Docker Compose ile hızlı kurulum
 
-| Servis          | Açıklama                          |
-| --------------- | --------------------------------- |
-| `db`            | PostgreSQL veritabanı             |
-| `web`           | Web arayüzü ve API servisi        |
-| `orchestrator`  | Senkronizasyon zamanlayıcısı      |
-| `worker-domain` | Domain IOC işleyici               |
-| `worker-ip`     | IPv4 IOC işleyici                 |
-| `worker-url`    | URL IOC işleyici                  |
-| `worker-ipv6`   | IPv6 IOC işleyici                 |
-| `nginx`         | Web arayüzü ve feed yayın katmanı |
+Servis durumu ve senkronizasyon takibi
 
----
+Hızlı Kurulum
 
-## Minimum Sistem Gereksinimleri
+Ubuntu
 
-| Kaynak | Önerilen |
-| ------ | -------: |
-| CPU    |   2 vCPU |
-| RAM    |     4 GB |
-| Disk   |    40 GB |
+Temiz bir Ubuntu sunucuda:
 
-Önerilen ortam:
-
-* Ubuntu Server 22.04 LTS veya üzeri
-* Docker Engine
-* Docker Compose Plugin
-* İnternet erişimi
-* TCP `80` portu veya özel HTTP portu
-
-> Kaynak ihtiyacı IOC sayısına, senkronizasyon sıklığına, log boyutuna ve saklanan geçmiş veriye göre değişebilir.
-
----
-
-## Ubuntu Hızlı Kurulum
-
-Temiz bir Ubuntu sunucu üzerinde aşağıdaki komutları çalıştırabilirsiniz:
-
-```bash
 curl -fsSL https://raw.githubusercontent.com/hguler07/usom-ioc-gateway/main/bootstrap-ubuntu.sh -o bootstrap-ubuntu.sh
 chmod +x bootstrap-ubuntu.sh
 sudo ./bootstrap-ubuntu.sh
-```
 
-Kurulum tamamlandıktan sonra web arayüzüne aşağıdaki adresten erişebilirsiniz:
+Kurulum tamamlandığında:
 
-```text
 http://SUNUCU_IP_ADRESI
-```
 
-Varsayılan kullanıcı adı:
+Windows 10 / 11
 
-```text
-admin
-```
+PowerShell'i Yönetici olarak açın ve çalıştırın:
 
-Admin parolası kurulum sırasında otomatik oluşturulur ve kurulum sonunda ekranda gösterilir.
-
----
-
-## Manuel Kurulum
-
-Docker kurulu bir sistemde manuel kurulum için:
-
-```bash
-git clone https://github.com/hguler07/usom-ioc-gateway.git
-cd usom-ioc-gateway
-chmod +x install.sh
-sudo ./install.sh
-```
-
-Servisleri kontrol etmek için:
-
-```bash
-docker compose -f compose.yaml ps
-```
-
----
-
-## Windows Kurulumu
-
-Gereksinimler:
-
-* Windows 10/11
-* Docker Desktop
-* Git for Windows
-* PowerShell
-
-PowerShell’i Yönetici olarak açıp aşağıdaki komutları çalıştırabilirsiniz:
-
-```
 irm "https://raw.githubusercontent.com/hguler07/usom-ioc-gateway/main/install-windows.ps1?v=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())" | iex
-```
 
-Varsayılan erişim adresi:
+Kurulum tamamlandığında:
 
-```text
 http://localhost:8080
-```
----
-## Feed Adresleri
 
-IOC feed çıktıları `/feeds/` altında yayınlanır.
+Varsayılan kullanıcı adı admin'dir. Admin parolası kurulum sırasında güvenli şekilde oluşturulur ve işlem sonunda ekranda gösterilir.
 
-Ubuntu sunucu örneği:
+Sistem Gereksinimleri
 
-```text
+Kaynak
+
+Önerilen
+
+CPU
+
+2 vCPU
+
+RAM
+
+4 GB
+
+Disk
+
+40 GB
+
+İnternet erişimi ve Docker çalışma ortamı gereklidir. Windows kurulum aracı gerekli bileşenleri kontrol eder.
+
+Mimari
+
+Servis
+
+Görev
+
+db
+
+PostgreSQL veritabanı
+
+web
+
+Yönetim paneli ve API
+
+orchestrator
+
+Senkronizasyon zamanlayıcısı
+
+worker-domain
+
+Domain IOC işlemleri
+
+worker-ip
+
+IPv4 IOC işlemleri
+
+worker-url
+
+URL IOC işlemleri
+
+worker-ipv6
+
+IPv6 IOC işlemleri
+
+nginx
+
+Web erişimi ve feed yayını
+
+Feed Erişimi
+
+Ubuntu:
+
 http://SUNUCU_IP_ADRESI/feeds/
-```
 
-Lokal Docker Desktop örneği:
+Windows:
 
-```text
 http://localhost:8080/feeds/
-```
 
----
+Yapılandırma
 
-## Yapılandırma
+Kurulum sırasında .env.example dosyasından yerel bir .env dosyası oluşturulur.
 
-Kurulum sırasında `.env.example` dosyasından `.env` dosyası oluşturulur.
+Başlıca değişkenler:
 
-Öne çıkan ayarlar:
+Değişken
 
-| Değişken                        | Açıklama                                   |
-| ------------------------------- | ------------------------------------------ |
-| `TFG_HTTP_PORT`                 | Web arayüzü ve feed yayını için HTTP portu |
-| `DJANGO_ALLOWED_HOSTS`          | İzin verilen hostname veya IP adresleri    |
-| `POSTGRES_DB`                   | PostgreSQL veritabanı adı                  |
-| `POSTGRES_USER`                 | PostgreSQL kullanıcı adı                   |
-| `POSTGRES_PASSWORD`             | PostgreSQL kullanıcı parolası              |
-| `DJANGO_SUPERUSER_USERNAME`     | Admin kullanıcı adı                        |
-| `DJANGO_SUPERUSER_PASSWORD`     | Admin kullanıcı parolası                   |
-| `USOM_FETCH_CONCURRENCY`        | USOM veri çekme eşzamanlılık değeri        |
-| `ORCHESTRATOR_INTERVAL_SECONDS` | Senkronizasyon aralığı                     |
+Açıklama
 
-> `.env` dosyası parola ve secret bilgileri içerdiği için GitHub’a yüklenmemelidir.
+TFG_HTTP_PORT
 
----
+Web ve feed yayın portu
 
-## Sık Kullanılan Komutlar
+DJANGO_ALLOWED_HOSTS
 
-Servis durumunu görüntüleme:
+İzin verilen adresler
 
-```bash
-docker compose -f compose.yaml ps
-```
+ORCHESTRATOR_INTERVAL_SECONDS
 
-Son logları görüntüleme:
+Senkronizasyon aralığı
 
-```bash
-docker compose -f compose.yaml logs --tail=100
-```
+USOM_FETCH_CONCURRENCY
 
-Canlı log izleme:
+Eş zamanlı veri çekme değeri
 
-```bash
-docker compose -f compose.yaml logs -f
-```
+DJANGO_SUPERUSER_USERNAME
 
-Servisleri yeniden başlatma:
+Yönetici kullanıcı adı
 
-```bash
-docker compose -f compose.yaml up -d
-```
+.env dosyası parola ve secret bilgileri içerir. GitHub'a yüklenmemelidir.
 
-Servisleri durdurma:
+Temel Yönetim Komutları
 
-```bash
-docker compose -f compose.yaml down
-```
+Ubuntu proje dizini:
 
-Güncel imajları çekip yeniden başlatma:
+cd /opt/usom-ioc-gateway
 
-```bash
-git pull
-docker compose -f compose.yaml pull
-docker compose -f compose.yaml up -d --remove-orphans
-```
+Windows proje dizini:
 
----
+Set-Location "C:\USOM\usom-ioc-gateway"
 
-## Ubuntu Kaldırma
+Servis durumu:
 
-USOM IOC Gateway servislerini kaldırmak için:
+docker compose ps
 
-```bash
+Son loglar:
+
+docker compose logs --tail=100
+
+Canlı log takibi:
+
+docker compose logs -f
+
+Güncelleme ve yeniden başlatma:
+
+docker compose pull
+docker compose up -d --remove-orphans
+
+Ubuntu Kaldırma
+
 cd /opt/usom-ioc-gateway
 sudo ./uninstall.sh
-```
 
-Docker Engine dahil daha kapsamlı kaldırma için:
+Docker Engine dahil kapsamlı kaldırma:
 
-```bash
-cd /opt/usom-ioc-gateway
 sudo ./uninstall.sh --purge-docker
-```
 
-> Aynı sunucuda başka Docker servisleri çalışıyorsa `--purge-docker` parametresi kullanılmamalıdır.
-
----
+Aynı sunucuda başka Docker servisleri çalışıyorsa --purge-docker kullanılmamalıdır.
