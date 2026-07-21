@@ -100,10 +100,22 @@ function Start-RepositoryBootstrap {
         New-Item -Path $extractPath -ItemType Directory -Force | Out-Null
 
         Write-Host "Extracting project package..." -ForegroundColor Cyan
-        Expand-Archive `
-            -LiteralPath $archivePath `
-            -DestinationPath $extractPath `
-            -Force
+
+        # Do not use Expand-Archive here. On some Windows PowerShell 5.1
+        # installations the Microsoft.PowerShell.Archive module tries to
+        # resolve a stale 8.3 user-profile path and fails before extraction.
+        Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue
+
+        if (Test-Path -LiteralPath $extractPath) {
+            Remove-Item -LiteralPath $extractPath -Recurse -Force
+        }
+
+        New-Item -Path $extractPath -ItemType Directory -Force | Out-Null
+
+        [System.IO.Compression.ZipFile]::ExtractToDirectory(
+            $archivePath,
+            $extractPath
+        )
 
         $extractedRepository = Join-Path $extractPath $RepositoryArchiveFolder
 
