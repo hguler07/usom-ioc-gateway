@@ -2,7 +2,7 @@
 
 # USOM IOC Platformu
 
-**USOM IOC verilerini senkronize eden ve güvenlik ürünleri için kullanıma hazır TXT feed'leri yayımlayan Docker tabanlı IOC Gateway.**
+**USOM IOC verilerini senkronize eden ve güvenlik ürünleri için kullanıma hazır TXT feed'leri yayımlayan Docker tabanlı IOC Platformu.**
 
 <p>
   <img alt="Docker" src="https://img.shields.io/badge/Docker-Ready-0D1117?style=flat-square&logo=docker&logoColor=2496ED&labelColor=0D1117">
