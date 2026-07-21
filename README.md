@@ -1,6 +1,6 @@
 <div align="center">
 
-# USOM IOC Gateway
+# USOM IOC Platformu
 
 **USOM IOC verilerini senkronize eden ve güvenlik ürünleri için kullanıma hazır TXT feed'leri yayımlayan Docker tabanlı IOC Gateway.**
 
