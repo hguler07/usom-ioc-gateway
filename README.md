@@ -13,7 +13,7 @@
 
 <p>
   <a href="./README.md">
-    <img alt="Türkçe" src="https://img.shields.io/badge/Language-T%C3%BCrk%C3%A7e-4F7DF3">
+    <img alt="Türkçe" src="https://img.shields.io/badge/Language-T%C3%BCrk%C3%A7e-2563EB">
   </a>
   <a href="./README_EN.md">
     <img alt="English" src="https://img.shields.io/badge/Language-English-3B82F6">
