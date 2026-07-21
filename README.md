@@ -4,38 +4,29 @@
 
 **USOM IOC verilerini senkronize eden ve güvenlik ürünleri için kullanıma hazır TXT feed'leri yayımlayan Docker tabanlı IOC Gateway.**
 
-<p>
+<p align="center">
   <img
     alt="Docker"
-    src="https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white"
+    src="https://img.shields.io/badge/Docker-Ready-0D1117?style=flat-square&logo=docker&logoColor=2496ED&labelColor=0D1117"
   >
   <img
     alt="PostgreSQL"
-    src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white"
+    src="https://img.shields.io/badge/PostgreSQL-16-0D1117?style=flat-square&logo=postgresql&logoColor=4169E1&labelColor=0D1117"
   >
   <img
     alt="Linux"
-    src="https://img.shields.io/badge/Linux-Supported-3C3C3D?style=flat-square&logo=linux&logoColor=FCC624"
+    src="https://img.shields.io/badge/Linux-Supported-0D1117?style=flat-square&logo=linux&logoColor=FCC624&labelColor=0D1117"
   >
   <img
     alt="Windows"
-    src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?style=flat-square&logo=windows11&logoColor=white"
+    src="https://img.shields.io/badge/Windows-10%20%7C%2011-0D1117?style=flat-square&labelColor=0D1117&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0iI0ZGRkZGRiIgZD0iTTIgMy41IDEwLjUgMi4zdjguMkgyVjMuNVptOS41LTEuMzVMMjIgMC43djkuOEgxMS41VjIuMTVaTTIgMTEuNWg4LjV2OC4yTDIgMTguNXYtN1ptOS41IDBIMjJ2OS44bC0xMC41LTEuNDVWMTEuNVoiLz48L3N2Zz4%3D"
   >
 </p>
 
-<p>
-  <a href="./README.md">
-    <img
-      alt="Türkçe"
-      src="https://img.shields.io/badge/T%C3%BCrk%C3%A7e-475569?style=flat-square"
-    >
-  </a>
-  <a href="./README_EN.md">
-    <img
-      alt="English"
-      src="https://img.shields.io/badge/English-475569?style=flat-square"
-    >
-  </a>
+<p align="center">
+  <a href="./README.md"><strong>Türkçe</strong></a>
+  &nbsp;&nbsp;•&nbsp;&nbsp;
+  <a href="./README_EN.md">English</a>
 </p>
 
 ## Nedir?
