@@ -3,6 +3,13 @@
 
 $ErrorActionPreference = "Stop"
 
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+}
+catch {
+    # TLS configuration is best effort on newer PowerShell versions.
+}
+
 $DefaultPort  = "8080"
 
 # When this script is executed directly from GitHub (irm ... | iex),
@@ -38,39 +45,140 @@ function Find-GitExecutable {
     return $null
 }
 
+function Invoke-DownloadFile {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Uri,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Destination
+    )
+
+    $destinationDirectory = Split-Path -Parent $Destination
+
+    if (-not [string]::IsNullOrWhiteSpace($destinationDirectory)) {
+        New-Item -Path $destinationDirectory -ItemType Directory -Force | Out-Null
+    }
+
+    Invoke-WebRequest `
+        -Uri $Uri `
+        -OutFile $Destination `
+        -UseBasicParsing `
+        -Headers @{ "User-Agent" = "USOM-IOC-Gateway-Installer" } `
+        -ErrorAction Stop | Out-Null
+
+    if (-not (Test-Path -LiteralPath $Destination -PathType Leaf)) {
+        throw "Downloaded file was not created: $Destination"
+    }
+
+    if ((Get-Item -LiteralPath $Destination).Length -lt 1MB) {
+        throw "Downloaded file is unexpectedly small: $Destination"
+    }
+}
+
+function Install-GitFromOfficialRelease {
+    Write-Host "Downloading Git for Windows from the official release repository..." -ForegroundColor Cyan
+
+    $release = Invoke-RestMethod `
+        -Uri "https://api.github.com/repos/git-for-windows/git/releases/latest" `
+        -Headers @{ "User-Agent" = "USOM-IOC-Gateway-Installer" } `
+        -UseBasicParsing `
+        -ErrorAction Stop
+
+    $asset = $release.assets |
+        Where-Object { $_.name -match '^Git-[0-9].*-64-bit\.exe$' } |
+        Select-Object -First 1
+
+    if ($null -eq $asset -or [string]::IsNullOrWhiteSpace($asset.browser_download_url)) {
+        throw "The latest official Git for Windows x64 installer could not be located."
+    }
+
+    $installerPath = Join-Path $env:TEMP $asset.name
+
+    try {
+        Invoke-DownloadFile -Uri $asset.browser_download_url -Destination $installerPath
+
+        Write-Host "Installing Git for Windows..." -ForegroundColor Cyan
+
+        $process = Start-Process `
+            -FilePath $installerPath `
+            -ArgumentList @(
+                "/VERYSILENT",
+                "/NORESTART",
+                "/NOCANCEL",
+                "/SP-",
+                "/CLOSEAPPLICATIONS"
+            ) `
+            -Wait `
+            -PassThru
+
+        if ($process.ExitCode -ne 0) {
+            throw "Git for Windows installer returned exit code $($process.ExitCode)."
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $installerPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Install-GitIfMissing {
     $gitExecutable = Find-GitExecutable
 
     if (-not [string]::IsNullOrWhiteSpace($gitExecutable)) {
+        Write-Host "Git detected: $gitExecutable" -ForegroundColor DarkGray
         return $gitExecutable
     }
 
+    Write-Host "Git is not installed." -ForegroundColor Yellow
+
     $wingetCommand = Get-Command winget.exe -ErrorAction SilentlyContinue
+    $wingetSucceeded = $false
 
-    if ($null -eq $wingetCommand) {
-        throw "Git is not installed and Windows Package Manager (winget) is unavailable. Install Git for Windows first."
+    if ($null -ne $wingetCommand) {
+        Write-Host "Trying Git installation with Windows Package Manager..." -ForegroundColor Cyan
+
+        $wingetOutput = & $wingetCommand.Source install `
+            --id Git.Git `
+            --exact `
+            --source winget `
+            --accept-package-agreements `
+            --accept-source-agreements `
+            --silent 2>&1
+
+        $wingetExitCode = $LASTEXITCODE
+        $wingetOutput | Out-Host
+        $wingetSucceeded = ($wingetExitCode -eq 0)
+
+        if (-not $wingetSucceeded) {
+            Write-Host "winget installation was not successful. Official direct download will be used." -ForegroundColor Yellow
+        }
+    }
+    else {
+        Write-Host "winget is unavailable. Official direct download will be used." -ForegroundColor Yellow
     }
 
-    Write-Host "Git is not installed. Installing Git for Windows..." -ForegroundColor Cyan
+    if ($wingetSucceeded) {
+        Start-Sleep -Seconds 2
+        $gitExecutable = Find-GitExecutable
 
-    & $wingetCommand.Source install `
-        --id Git.Git `
-        --exact `
-        --source winget `
-        --accept-package-agreements `
-        --accept-source-agreements `
-        --silent
+        if (-not [string]::IsNullOrWhiteSpace($gitExecutable)) {
+            Write-Host "Git installed successfully." -ForegroundColor Green
+            return $gitExecutable
+        }
 
-    if ($LASTEXITCODE -ne 0) {
-        throw "Git installation failed."
+        Write-Host "winget reported success, but git.exe was not found. Official direct download will be tried." -ForegroundColor Yellow
     }
+
+    Install-GitFromOfficialRelease
+    Start-Sleep -Seconds 2
 
     $gitExecutable = Find-GitExecutable
 
     if ([string]::IsNullOrWhiteSpace($gitExecutable)) {
-        throw "Git was installed, but git.exe could not be found. Open a new PowerShell window and run the command again."
+        throw "Git installation completed, but git.exe could not be found."
     }
 
+    Write-Host "Git installed successfully." -ForegroundColor Green
     return $gitExecutable
 }
 
@@ -246,6 +354,355 @@ function Invoke-DockerCommand {
     }
 }
 
+
+function Find-DockerExecutable {
+    $dockerCommand = Get-Command docker.exe -ErrorAction SilentlyContinue
+
+    if ($null -ne $dockerCommand) {
+        return $dockerCommand.Source
+    }
+
+    $candidates = @(
+        "$env:ProgramFiles\Docker\Docker\resources\bin\docker.exe",
+        "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"
+    )
+
+    foreach ($candidate in $candidates) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and
+            (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Find-DockerDesktopExecutable {
+    $candidates = @(
+        "$env:ProgramFiles\Docker\Docker\Docker Desktop.exe",
+        "$env:LOCALAPPDATA\Programs\DockerDesktop\Docker Desktop.exe"
+    )
+
+    foreach ($candidate in $candidates) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and
+            (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            return $candidate
+        }
+    }
+
+    return $null
+}
+
+function Test-IsAdministrator {
+    try {
+        $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+        $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+        return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    }
+    catch {
+        return $false
+    }
+}
+
+function Ensure-WslForDocker {
+    $wslCommand = Get-Command wsl.exe -ErrorAction SilentlyContinue
+
+    if ($null -eq $wslCommand) {
+        throw "WSL is unavailable on this Windows version. Update Windows before installing Docker Desktop."
+    }
+
+    & $wslCommand.Source --version *> $null
+    $wslAvailable = ($LASTEXITCODE -eq 0)
+
+    if (-not $wslAvailable) {
+        if (-not (Test-IsAdministrator)) {
+            throw "WSL is not installed. Open PowerShell as Administrator and run the same installation command again."
+        }
+
+        Write-Host "WSL is not installed. Installing WSL 2..." -ForegroundColor Cyan
+
+        $wslOutput = & $wslCommand.Source --install --no-distribution 2>&1
+        $wslExitCode = $LASTEXITCODE
+        $wslOutput | Out-Host
+
+        if ($wslExitCode -ne 0) {
+            throw "WSL installation failed."
+        }
+
+        Write-Host ""
+        Write-Host "WSL was installed. Restart Windows, then run the same installation command again." -ForegroundColor Yellow
+        throw "Windows restart is required before Docker Desktop can be installed."
+    }
+
+    Write-Host "Updating WSL..." -ForegroundColor Cyan
+    & $wslCommand.Source --update *> $null
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "WSL update could not be completed. Continuing with the installed WSL version." -ForegroundColor Yellow
+    }
+
+    & $wslCommand.Source --set-default-version 2 *> $null
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "WSL default version could not be set automatically. Docker Desktop will verify it during startup." -ForegroundColor Yellow
+    }
+}
+
+function Install-DockerDesktopFromOfficialSource {
+    $installerPath = Join-Path $env:TEMP "Docker-Desktop-Installer.exe"
+    $downloadUrl = "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
+
+    try {
+        Write-Host "Downloading Docker Desktop from Docker's official server..." -ForegroundColor Cyan
+        Invoke-DownloadFile -Uri $downloadUrl -Destination $installerPath
+
+        Write-Host "Installing Docker Desktop with the WSL 2 backend..." -ForegroundColor Cyan
+
+        $process = Start-Process `
+            -FilePath $installerPath `
+            -ArgumentList @(
+                "install",
+                "--user",
+                "--accept-license",
+                "--backend=wsl-2",
+                "--quiet"
+            ) `
+            -Wait `
+            -PassThru
+
+        if ($process.ExitCode -ne 0) {
+            throw "Docker Desktop installer returned exit code $($process.ExitCode)."
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $installerPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Install-DockerDesktopIfMissing {
+    $dockerExecutable = Find-DockerExecutable
+
+    if (-not [string]::IsNullOrWhiteSpace($dockerExecutable)) {
+        return $dockerExecutable
+    }
+
+    Write-Host "Docker Desktop is not installed." -ForegroundColor Yellow
+    Ensure-WslForDocker
+
+    $wingetCommand = Get-Command winget.exe -ErrorAction SilentlyContinue
+    $wingetSucceeded = $false
+
+    if ($null -ne $wingetCommand) {
+        Write-Host "Trying Docker Desktop installation with Windows Package Manager..." -ForegroundColor Cyan
+
+        $wingetOutput = & $wingetCommand.Source install `
+            --id Docker.DockerDesktop `
+            --exact `
+            --source winget `
+            --accept-package-agreements `
+            --accept-source-agreements `
+            --silent 2>&1
+
+        $wingetExitCode = $LASTEXITCODE
+        $wingetOutput | Out-Host
+        $wingetSucceeded = ($wingetExitCode -eq 0)
+
+        if (-not $wingetSucceeded) {
+            Write-Host "winget installation was not successful. Official direct download will be used." -ForegroundColor Yellow
+        }
+    }
+    else {
+        Write-Host "winget is unavailable. Official Docker download will be used." -ForegroundColor Yellow
+    }
+
+    if ($wingetSucceeded) {
+        Start-Sleep -Seconds 3
+        $dockerExecutable = Find-DockerExecutable
+
+        if (-not [string]::IsNullOrWhiteSpace($dockerExecutable)) {
+            Write-Host "Docker Desktop installed successfully." -ForegroundColor Green
+            return $dockerExecutable
+        }
+
+        Write-Host "winget reported success, but docker.exe was not found. Official direct download will be tried." -ForegroundColor Yellow
+    }
+
+    Install-DockerDesktopFromOfficialSource
+    Start-Sleep -Seconds 3
+
+    $dockerExecutable = Find-DockerExecutable
+
+    if ([string]::IsNullOrWhiteSpace($dockerExecutable)) {
+        throw "Docker Desktop installation completed, but docker.exe could not be found."
+    }
+
+    Write-Host "Docker Desktop installed successfully." -ForegroundColor Green
+    return $dockerExecutable
+}
+
+function Wait-DockerEngine {
+    param(
+        [int]$TimeoutSeconds = 360
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+
+    do {
+        & docker info *> $null
+
+        if ($LASTEXITCODE -eq 0) {
+            return $true
+        }
+
+        Start-Sleep -Seconds 5
+    }
+    while ((Get-Date) -lt $deadline)
+
+    return $false
+}
+
+function Ensure-DockerEnvironment {
+    $dockerExecutable = Install-DockerDesktopIfMissing
+
+    $dockerDirectory = Split-Path -Parent $dockerExecutable
+    if ($env:PATH -notlike "*$dockerDirectory*") {
+        $env:PATH = "$dockerDirectory;$env:PATH"
+    }
+
+    & docker info *> $null
+
+    if ($LASTEXITCODE -ne 0) {
+        $desktopExecutable = Find-DockerDesktopExecutable
+
+        if ([string]::IsNullOrWhiteSpace($desktopExecutable)) {
+            throw "Docker Desktop is installed, but Docker Desktop.exe could not be found."
+        }
+
+        Write-Host "Starting Docker Desktop..." -ForegroundColor Cyan
+        Start-Process -FilePath $desktopExecutable | Out-Null
+
+        if (-not (Wait-DockerEngine -TimeoutSeconds 360)) {
+            throw "Docker Desktop did not become ready within 6 minutes. A Windows restart or first-run confirmation may be required."
+        }
+    }
+
+    & docker compose version *> $null
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Docker Compose is unavailable. Update Docker Desktop."
+    }
+
+    Write-Host "Docker Desktop is ready." -ForegroundColor Green
+}
+
+function Test-DockerObjectExists {
+    param(
+        [ValidateSet("volume", "network")]
+        [string]$ObjectType,
+
+        [string]$Name
+    )
+
+    & docker $ObjectType inspect $Name *> $null
+    return ($LASTEXITCODE -eq 0)
+}
+
+function Test-ExistingInstallation {
+    param(
+        [string]$EnvPath
+    )
+
+    if (Test-Path -LiteralPath $EnvPath -PathType Leaf) {
+        return $true
+    }
+
+    $containerIds = @(
+        & docker ps -aq --filter "label=com.docker.compose.project=usom-ioc-gateway" 2>$null
+    )
+
+    if ($containerIds.Count -gt 0) {
+        return $true
+    }
+
+    if (Test-DockerObjectExists -ObjectType "volume" -Name "usom-ioc-gateway_postgres_data") {
+        return $true
+    }
+
+    if (Test-DockerObjectExists -ObjectType "volume" -Name "usom-ioc-gateway_feeds_data") {
+        return $true
+    }
+
+    if (Test-DockerObjectExists -ObjectType "network" -Name "usom-ioc-gateway_default") {
+        return $true
+    }
+
+    return $false
+}
+
+function Read-CleanInstallChoice {
+    Write-Host ""
+    Write-Host "Eski bir USOM IOC Gateway kurulumu veya Docker kalıntıları bulundu." -ForegroundColor Yellow
+    Write-Host "Temiz kurulum; eski veritabanını, feedleri, containerları, ağı ve üretilen şifreleri siler." -ForegroundColor Yellow
+
+    while ($true) {
+        $answer = (Read-Host "Temiz kurulum yapılsın mı? [E/H]").Trim().ToUpperInvariant()
+
+        switch ($answer) {
+            "E" { return $true }
+            "Y" { return $true }
+            "H" { return $false }
+            "N" { return $false }
+            default {
+                Write-Host "Evet için E, Hayır için H girin." -ForegroundColor Yellow
+            }
+        }
+    }
+}
+
+function Remove-ExistingInstallation {
+    param(
+        [string]$EnvPath
+    )
+
+    Write-Host "Eski USOM IOC Gateway Docker kaynakları temizleniyor..." -ForegroundColor Cyan
+
+    $containerIds = @(
+        & docker ps -aq --filter "label=com.docker.compose.project=usom-ioc-gateway" 2>$null
+    )
+
+    if ($containerIds.Count -gt 0) {
+        & docker rm -f @containerIds *> $null
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Old USOM IOC Gateway containers could not be removed."
+        }
+    }
+
+    foreach ($volumeName in @(
+        "usom-ioc-gateway_postgres_data",
+        "usom-ioc-gateway_feeds_data"
+    )) {
+        if (Test-DockerObjectExists -ObjectType "volume" -Name $volumeName) {
+            & docker volume rm -f $volumeName *> $null
+
+            if ($LASTEXITCODE -ne 0) {
+                throw "Docker volume could not be removed: $volumeName"
+            }
+        }
+    }
+
+    if (Test-DockerObjectExists -ObjectType "network" -Name "usom-ioc-gateway_default") {
+        & docker network rm "usom-ioc-gateway_default" *> $null
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Old Docker network could not be removed."
+        }
+    }
+
+    Remove-Item -LiteralPath $EnvPath -Force -ErrorAction SilentlyContinue
+
+    Write-Host "Eski kurulum verileri silindi. Temiz kurulum oluşturulacak." -ForegroundColor Green
+}
 
 function Wait-PostgresReady {
     param(
@@ -495,21 +952,18 @@ try {
         throw ".env.example not found. Run this script inside the repository folder."
     }
 
-    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        throw "Docker command not found. Install Docker Desktop first."
-    }
+    Write-Host "Checking Windows prerequisites..." -ForegroundColor Cyan
+    Ensure-DockerEnvironment
 
-    Write-Host "Checking Docker Desktop..." -ForegroundColor Cyan
-    & docker info *> $null
+    if (Test-ExistingInstallation -EnvPath $EnvPath) {
+        $cleanInstall = Read-CleanInstallChoice
 
-    if ($LASTEXITCODE -ne 0) {
-        throw "Docker Desktop is not running. Start Docker Desktop and try again."
-    }
-
-    & docker compose version *> $null
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "Docker Compose is not available. Update Docker Desktop."
+        if ($cleanInstall) {
+            Remove-ExistingInstallation -EnvPath $EnvPath
+        }
+        else {
+            Write-Host "Existing installation data will be preserved and repaired where possible." -ForegroundColor DarkGray
+        }
     }
 
     if (-not (Test-Path -LiteralPath $EnvPath -PathType Leaf)) {
