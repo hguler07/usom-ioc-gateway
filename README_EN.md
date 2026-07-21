@@ -20,7 +20,7 @@
 </div>
 
 <p align="center">
-  <img src="./usom-ioc-gateway-dashboard.png" alt="USOM IOC Gateway management interface" width="100%">
+  <img src="./EN.png" alt="USOM IOC Gateway management interface" width="100%">
 </p>
 
 <p align="center">
