@@ -3,6 +3,22 @@
 
 $ErrorActionPreference = "Stop"
 
+# Windows PowerShell 5.1 may use the legacy console code page by default.
+# Force UTF-8 so Turkish characters are displayed and read correctly.
+try {
+    $Utf8ConsoleEncoding = New-Object System.Text.UTF8Encoding($false)
+    [Console]::InputEncoding = $Utf8ConsoleEncoding
+    [Console]::OutputEncoding = $Utf8ConsoleEncoding
+    $global:OutputEncoding = $Utf8ConsoleEncoding
+
+    if ($Host.Name -eq "ConsoleHost") {
+        & "$env:SystemRoot\System32\chcp.com" 65001 *> $null
+    }
+}
+catch {
+    # Encoding configuration is best effort on hosts without a standard console.
+}
+
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 }
@@ -153,6 +169,20 @@ function Start-RepositoryBootstrap {
         }
 
         $localInstaller = Join-Path $RepositoryPath "install-windows.ps1"
+
+        # Windows PowerShell 5.1 treats UTF-8 files without a BOM as ANSI.
+        # Normalize the extracted local installer before running it so Turkish
+        # characters remain correct even if the repository editor removed BOM.
+        $localInstallerContent = [System.IO.File]::ReadAllText(
+            $localInstaller,
+            [System.Text.Encoding]::UTF8
+        )
+        $Utf8WithBom = New-Object System.Text.UTF8Encoding($true)
+        [System.IO.File]::WriteAllText(
+            $localInstaller,
+            $localInstallerContent,
+            $Utf8WithBom
+        )
 
         Write-Host "Starting local installer..." -ForegroundColor Green
 
