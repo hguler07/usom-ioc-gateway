@@ -38,18 +38,18 @@ kullanabileceği TXT feed'leri halinde sunar.
 <h2 align="center">Öne Çıkan Özellikler</h2>
 
 <p align="center">
-- USOM API üzerinden Domain, IPv4, IPv6, IPv6 Network ve URL IOC kayıtlarını senkronize eder.
-- Her IOC türünü ayrı worker servisleriyle paralel ve kontrollü şekilde işler.
-- IOC arama, sistem sağlığı, senkronizasyon durumu ve değişiklik geçmişini tek panelde gösterir.
-- Korunan Varlıklar özelliğiyle kuruma ait domain ve IP adreslerinin IOC listelerinde yer alıp almadığını takip eder.
-- Güvenlik ürünlerinin doğrudan kullanabileceği sade TXT feed dosyaları üretir.
-- Büyük feed listelerini yönetilebilir parçalara böler.
-- Verileri PostgreSQL üzerinde kalıcı olarak saklar.
-- Eklenen, silinen, güncellenen ve yeniden eklenen IOC kayıtlarını takip eder.
-- Senkronizasyon hatalarına karşı retry, backoff, boş sayfa kontrolü ve tutarlılık kontrolü gibi koruma parametreleri içerir.
-- Container image güvenliği için güncel base image kullanımı ve Docker Hub tarafından tespit edilen zafiyetlere yönelik iyileştirmeler yapılmıştır.
-- Docker Compose ile Linux ve Windows ortamlarında hızlı kurulum sağlar.
-- Türkçe ve İngilizce arayüz desteği sunar.
+- USOM API üzerinden Domain, IPv4, IPv6, IPv6 Network ve URL IOC kayıtlarını senkronize eder.<br>
+- Her IOC türünü ayrı worker servisleriyle paralel ve kontrollü şekilde işler.<br>
+- IOC arama, sistem sağlığı, senkronizasyon durumu ve değişiklik geçmişini tek panelde gösterir.<br>
+- Korunan Varlıklar özelliğiyle kuruma ait domain ve IP adreslerinin IOC listelerinde yer alıp almadığını takip eder.<br>
+- Güvenlik ürünlerinin doğrudan kullanabileceği sade TXT feed dosyaları üretir.<br>
+- Büyük feed listelerini yönetilebilir parçalara böler.<br>
+- Verileri PostgreSQL üzerinde kalıcı olarak saklar.<br>
+- Eklenen, silinen, güncellenen ve yeniden eklenen IOC kayıtlarını takip eder.<br>
+- Senkronizasyon hatalarına karşı retry, backoff, boş sayfa kontrolü ve tutarlılık kontrolü gibi koruma parametreleri içerir.<br>
+- Container image güvenliği için güncel base image kullanımı ve Docker Hub tarafından tespit edilen zafiyetlere yönelik iyileştirmeler yapılmıştır.<br>
+- Docker Compose ile Linux ve Windows ortamlarında hızlı kurulum sağlar.<br>
+- Türkçe ve İngilizce arayüz desteği sunar.<br>
 - Açık ve koyu tema desteğiyle farklı kullanım tercihlerine uyum sağlar.
 </p>
 
