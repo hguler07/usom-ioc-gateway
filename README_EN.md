@@ -104,10 +104,9 @@ The installer checks the required components. An administrator password is gener
   <img alt="Disk" src="https://img.shields.io/badge/Disk-40%20GB-0D1117?style=flat-square&labelColor=0D1117">
 </p>
 
-> The generated `.env` file contains passwords and secrets and must not be committed to GitHub.
-
----
-
 <p align="center">
-  <sub>Built to deliver USOM IOC data to security products in a simpler, more organized, and manageable way.</sub>
+  <sub>
+    Developed by Hüseyin Güler · © 2026<br>
+    Designed and published for organizations to run within their own infrastructure.
+  </sub>
 </p>
