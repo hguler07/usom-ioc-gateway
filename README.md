@@ -44,7 +44,7 @@ kullanabileceği TXT feed'leri halinde sunar.
 <h2 align="center">Öne Çıkan Özellikler</h2>
 
 <p align="center">
-- USOM API üzerinden Domain, IPv4, IPv6, IPv6 Network ve URL IOC kayıtlarını senkronize eder.<br>
+- USOM API üzerinden Domain, IPv4, IPv6 ve URL IOC kayıtlarını senkronize eder.<br>
 - Her IOC türünü ayrı worker servisleriyle paralel ve kontrollü şekilde işler.<br>
 - IOC arama, sistem sağlığı, senkronizasyon durumu ve değişiklik geçmişini tek panelde gösterir.<br>
 - Korunan Varlıklar özelliğiyle kuruma ait domain ve IP adreslerinin IOC listelerinde yer alıp almadığını takip eder.<br>
