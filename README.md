@@ -17,6 +17,12 @@
   <a href="./README_EN.md">English</a>
 </p>
 
+<p>
+  <a href="https://www.linkedin.com/pulse/usom-ioc-gateway-bir-denetim-ihtiyac%25C4%25B1ndan-ortaya-%25C3%25A7%25C4%25B1kan-h%25C3%25BCseyin-g%25C3%25BCler-64wve">
+    <img alt="LinkedIn Article" src="https://img.shields.io/badge/LinkedIn-Makaleyi%20Oku-0A66C2?style=flat-square&logo=linkedin&logoColor=white&labelColor=0D1117">
+  </a>
+</p>
+
 </div>
 
 <p align="center">
