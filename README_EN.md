@@ -44,7 +44,7 @@ SIEM platforms, and security gateways.
 <h2 align="center">Key Features</h2>
 
 <p align="center">
-- Synchronizes Domain, IPv4, IPv6, IPv6 Network and URL IOC records from the USOM API.<br>
+- Synchronizes Domain, IPv4, IPv6 and URL IOC records from the USOM API.<br>
 - Processes each IOC type through separate worker services for controlled and parallel synchronization.<br>
 - Provides IOC search, system health, synchronization status and change history in a single web panel.<br>
 - Tracks whether organization-owned domains and IP addresses appear in IOC lists through the Protected Assets feature.<br>
